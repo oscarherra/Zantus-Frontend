@@ -1,27 +1,28 @@
 <template>
-  <header class="topbar">
-    <div class="topbar-row">
-      <div class="topbar-title">
-        <h2>{{ title }}</h2>
-        <p>{{ subtitle }}</p>
-      </div>
+  <div class="topbar-container">
+    <div class="topbar-left">
+      <h1 class="page-title">{{ title }}</h1>
+      <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>
+    </div>
 
-      <div class="topbar-user">
-        <span class="badge-role">{{ auth.user?.role || "user" }}</span>
-        <BaseButton variant="secondary" @click="handleLogout">
-          <LogOut size="16" />
-          Cerrar sesión
-        </BaseButton>
+    <div class="topbar-right">
+      <div class="user-profile">
+        <div class="avatar">
+          <User size="18" stroke-width="2.5" />
+        </div>
+        <div class="user-info">
+          <span class="user-name">{{ user?.name || 'Administrador' }}</span>
+          <span class="user-role">{{ user?.role?.toUpperCase() || 'ADMIN' }}</span>
+        </div>
       </div>
     </div>
-  </header>
+  </div>
 </template>
 
 <script setup>
-import { LogOut } from "lucide-vue-next";
-import { useRouter } from "vue-router";
-import { useAuthStore } from "../stores/auth";
-import BaseButton from "./BaseButton.vue";
+import { computed } from 'vue';
+import { User } from 'lucide-vue-next';
+import { useAuthStore } from '../stores/auth';
 
 defineProps({
   title: String,
@@ -29,10 +30,111 @@ defineProps({
 });
 
 const auth = useAuthStore();
-const router = useRouter();
-
-async function handleLogout() {
-  await auth.logout();
-  router.push("/login");
-}
+const user = computed(() => auth.user);
 </script>
+
+<style scoped>
+.topbar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.page-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-subtitle {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px 5px 5px;
+  background-color: #f4f4f5;
+  border-radius: 50px;
+  border: 1px solid var(--color-border);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  background-color: var(--color-brand-alpha);
+  color: var(--color-brand);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.user-role {
+  font-size: 0.65rem;
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+/* Mobile: hide subtitle text and user info text */
+@media (max-width: 640px) {
+  .page-title {
+    font-size: 1.1rem;
+  }
+
+  .page-subtitle {
+    display: none;
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .user-profile {
+    padding: 5px;
+    border-radius: 50%;
+  }
+}
+</style>
