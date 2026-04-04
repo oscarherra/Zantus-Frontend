@@ -23,21 +23,34 @@
           </div>
 
           <div v-if="cash.status === 'closed'" class="success-box">
-            <strong>Caja cerrada</strong><br/>
+            <strong>Caja cerrada</strong><br />
             Monto de cierre reportado: {{ currency(cash.closing_amount) }}.
           </div>
 
           <form v-if="cash.status === 'open'" class="form-grid" @submit.prevent="closeCash">
             <label class="label">
               Monto contado al cierre en colones
-              <input v-model.number="closing" class="input" type="number" min="0" step="0.01" placeholder="Ej. 150000" required />
+              <input
+                v-model.number="closing"
+                class="input"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Ej. 150000"
+                required
+              />
             </label>
             <button type="submit" class="btn btn-secondary">
               <Lock size="18" /> Cerrar caja
             </button>
           </form>
 
-          <button v-if="cash.status === 'closed'" type="button" class="btn btn-primary mt-4" @click="cash = null">
+          <button
+            v-if="cash.status === 'closed'"
+            type="button"
+            class="btn btn-primary mt-4"
+            @click="cash = null"
+          >
             <LockOpen size="18" /> Iniciar nueva caja
           </button>
         </div>
@@ -45,7 +58,15 @@
         <form v-else class="form-grid" @submit.prevent="openCash">
           <label class="label">
             Monto inicial en caja (Fondo)
-            <input v-model.number="opening" class="input" type="number" min="0" step="0.01" placeholder="Ej. 25000" required />
+            <input
+              v-model.number="opening"
+              class="input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Ej. 25000"
+              required
+            />
           </label>
           <button type="submit" class="btn btn-primary">
             <LockOpen size="18" /> Abrir caja
@@ -93,13 +114,26 @@
 
             <label class="label">
               Monto (₡)
-              <input v-model.number="form.amount" class="input" type="number" min="0.01" step="0.01" placeholder="0.00" required />
+              <input
+                v-model.number="form.amount"
+                class="input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
             </label>
           </div>
 
           <label class="label">
             Descripción / Detalle
-            <textarea v-model="form.description" class="textarea" placeholder="¿Por qué se hace este movimiento?" required></textarea>
+            <textarea
+              v-model="form.description"
+              class="textarea"
+              placeholder="¿Por qué se hace este movimiento?"
+              required
+            ></textarea>
           </label>
 
           <button type="submit" class="btn btn-primary" :disabled="!cash || cash.status !== 'open'">
@@ -114,7 +148,6 @@
       subtitle="Listado de ingresos y egresos de la sesión actual"
     >
       <div v-if="transactions.length" class="table-wrap">
-        <!-- Desktop table -->
         <table class="table hide-mobile">
           <thead>
             <tr>
@@ -142,7 +175,6 @@
           </tbody>
         </table>
 
-        <!-- Mobile cards -->
         <div class="mobile-cards show-mobile">
           <div v-for="item in transactions" :key="item.id" class="mobile-card">
             <div class="mobile-card-row">
@@ -160,6 +192,7 @@
           </div>
         </div>
       </div>
+
       <EmptyState v-else>
         No hay movimientos registrados en la caja actual.
       </EmptyState>
@@ -192,11 +225,18 @@ const form = reactive({
 });
 
 function currency(value) {
-  return new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC", maximumFractionDigits: 2 }).format(Number(value || 0));
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
 }
 
 function formatDateTime(value) {
-  return new Date(value).toLocaleTimeString("es-CR", { hour: '2-digit', minute: '2-digit' });
+  return new Date(value).toLocaleTimeString("es-CR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function paymentLabel(method) {
@@ -204,7 +244,10 @@ function paymentLabel(method) {
   return map[method] || method;
 }
 
-function clearMessages() { success.value = ""; error.value = ""; }
+function clearMessages() {
+  success.value = "";
+  error.value = "";
+}
 
 async function loadTodayCash() {
   const { data } = await api.get("/cash-sessions/today");
@@ -213,13 +256,16 @@ async function loadTodayCash() {
 }
 
 async function loadTransactions() {
-  const { data } = await api.get("/transactions", { params: { cash_session_id: cash.value?.id } });
+  const { data } = await api.get("/transactions", {
+    params: { cash_session_id: cash.value?.id },
+  });
   transactions.value = data.transactions?.data || [];
 }
 
 async function loadCategories() {
   const { data } = await api.get("/categories", { params: { type: form.type } });
   categories.value = data.categories || [];
+
   if (form.category_id && !categories.value.find((item) => item.id === form.category_id)) {
     form.category_id = "";
   }
@@ -228,26 +274,35 @@ async function loadCategories() {
 async function openCash() {
   clearMessages();
   try {
-    const { data } = await api.post("/cash-sessions/open", { opening_amount: opening.value });
+    const { data } = await api.post("/cash-sessions/open", {
+      opening_amount: opening.value,
+    });
     cash.value = data.cash_session;
     success.value = "Caja abierta correctamente.";
     opening.value = 0;
     await loadTransactions();
-  } catch (e) { error.value = e?.response?.data?.message || "No se pudo abrir la caja."; }
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo abrir la caja.";
+  }
 }
 
 async function closeCash() {
   clearMessages();
   try {
-    const { data } = await api.post(`/cash-sessions/${cash.value.id}/close`, { closing_amount: closing.value });
+    const { data } = await api.post(`/cash-sessions/${cash.value.id}/close`, {
+      closing_amount: closing.value,
+    });
     cash.value = data.cash_session;
     success.value = "Caja cerrada correctamente.";
     closing.value = 0;
-  } catch (e) { error.value = e?.response?.data?.message || "No se pudo cerrar la caja."; }
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo cerrar la caja.";
+  }
 }
 
 async function addTransaction() {
   clearMessages();
+
   if (!cash.value || cash.value.status !== "open") {
     error.value = "Debe existir una caja abierta para registrar movimientos.";
     return;
@@ -262,11 +317,21 @@ async function addTransaction() {
     form.amount = "";
     form.description = "";
     await loadTransactions();
-  } catch (e) { error.value = e?.response?.data?.message || "No se pudo registrar el movimiento."; }
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo registrar el movimiento.";
+  }
 }
 
-watch(() => form.type, async () => { await loadCategories(); });
-onMounted(async () => { await Promise.all([loadTodayCash(), loadCategories()]); });
+watch(
+  () => form.type,
+  async () => {
+    await loadCategories();
+  }
+);
+
+onMounted(async () => {
+  await Promise.all([loadTodayCash(), loadCategories()]);
+});
 </script>
 
 <style scoped>
@@ -279,21 +344,42 @@ onMounted(async () => { await Promise.all([loadTodayCash(), loadCategories()]); 
   border-radius: 8px;
   border: 1px solid var(--color-border);
   gap: 12px;
+  flex-wrap: wrap;
 }
 
-.text-right { text-align: right; }
+.text-right {
+  text-align: right;
+}
 
-.amount-display { font-size: 1.05rem; }
+.amount-display {
+  font-size: 1.05rem;
+}
 
-.mt-4 { margin-top: 16px; }
+.mt-4 {
+  margin-top: 16px;
+}
 
-.type-income { color: var(--color-success); font-weight: 500; }
-.type-expense { color: var(--color-danger); font-weight: 500; }
-.muted-cell { color: var(--color-text-secondary); }
+.type-income {
+  color: var(--color-success);
+  font-weight: 500;
+}
 
-/* Mobile cards */
-.hide-mobile { display: table; }
-.show-mobile { display: none; }
+.type-expense {
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+.muted-cell {
+  color: var(--color-text-secondary);
+}
+
+.hide-mobile {
+  display: table;
+}
+
+.show-mobile {
+  display: none;
+}
 
 .mobile-cards {
   display: flex;
@@ -315,6 +401,7 @@ onMounted(async () => { await Promise.all([loadTodayCash(), loadCategories()]); 
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
 }
 
 .mobile-card-meta {
@@ -331,11 +418,17 @@ onMounted(async () => { await Promise.all([loadTodayCash(), loadCategories()]); 
   border-top: 1px solid var(--color-border);
   padding-top: 6px;
   margin-top: 2px;
+  word-break: break-word;
 }
 
-@media (max-width: 640px) {
-  .hide-mobile { display: none; }
-  .show-mobile { display: block; }
+@media (max-width: 1024px) {
+  .hide-mobile {
+    display: none;
+  }
+
+  .show-mobile {
+    display: block;
+  }
 
   .cash-status-box {
     flex-direction: column;
@@ -343,6 +436,17 @@ onMounted(async () => { await Promise.all([loadTodayCash(), loadCategories()]); 
     gap: 8px;
   }
 
-  .text-right { text-align: left; }
+  .text-right {
+    text-align: left;
+  }
+
+  .mobile-card-row,
+  .mobile-card-meta {
+    flex-wrap: wrap;
+  }
+
+  .amount-display {
+    font-size: 1rem;
+  }
 }
 </style>

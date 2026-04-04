@@ -61,7 +61,6 @@
         subtitle="Pendientes dentro de los próximos 7 días"
       >
         <div v-if="upcoming.length" class="table-wrap">
-          <!-- Desktop -->
           <table class="table hide-mobile">
             <thead>
               <tr>
@@ -80,7 +79,7 @@
               </tr>
             </tbody>
           </table>
-          <!-- Mobile cards -->
+
           <div class="mobile-cards show-mobile">
             <div v-for="item in upcoming" :key="item.id" class="mobile-card">
               <div class="mobile-card-row">
@@ -94,6 +93,7 @@
             </div>
           </div>
         </div>
+
         <EmptyState v-else>No hay facturas próximas por vencer.</EmptyState>
       </AppPanel>
 
@@ -102,7 +102,6 @@
         subtitle="Movimientos recientes registrados en caja"
       >
         <div v-if="transactions.length" class="table-wrap">
-          <!-- Desktop -->
           <table class="table hide-mobile">
             <thead>
               <tr>
@@ -125,7 +124,7 @@
               </tr>
             </tbody>
           </table>
-          <!-- Mobile cards -->
+
           <div class="mobile-cards show-mobile">
             <div v-for="item in transactions" :key="item.id" class="mobile-card">
               <div class="mobile-card-row">
@@ -141,6 +140,7 @@
             </div>
           </div>
         </div>
+
         <EmptyState v-else>No hay transacciones registradas.</EmptyState>
       </AppPanel>
     </div>
@@ -149,7 +149,12 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
-import { TrendingUp, TrendingDown, BadgeDollarSign, CalendarClock } from "lucide-vue-next";
+import {
+  TrendingUp,
+  TrendingDown,
+  BadgeDollarSign,
+  CalendarClock,
+} from "lucide-vue-next";
 import api from "../services/api";
 import MainLayout from "../layouts/MainLayout.vue";
 import StatCard from "../components/StatCard.vue";
@@ -166,18 +171,30 @@ const upcoming = ref([]);
 const transactions = ref([]);
 const windowWidth = ref(window.innerWidth);
 
-function onResize() { windowWidth.value = window.innerWidth; }
-onMounted(() => window.addEventListener('resize', onResize));
-onUnmounted(() => window.removeEventListener('resize', onResize));
+function onResize() {
+  windowWidth.value = window.innerWidth;
+}
 
-const chartHeight = computed(() => windowWidth.value < 640 ? 220 : 300);
+onMounted(() => window.addEventListener("resize", onResize));
+onUnmounted(() => window.removeEventListener("resize", onResize));
+
+const chartHeight = computed(() => (windowWidth.value < 640 ? 220 : 300));
 
 function currency(value) {
-  return new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC", maximumFractionDigits: 2 }).format(Number(value || 0));
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
 }
 
 function formatDateTime(value) {
-  return new Date(value).toLocaleDateString("es-CR", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return new Date(value).toLocaleDateString("es-CR", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 async function loadKpis() {
@@ -186,7 +203,9 @@ async function loadKpis() {
 }
 
 async function loadSeries() {
-  const { data } = await api.get("/dashboard/sales-series", { params: { period: period.value } });
+  const { data } = await api.get("/dashboard/sales-series", {
+    params: { period: period.value },
+  });
   labels.value = data.series.map((item) => item.label);
   salesData.value = data.series.map((item) => Number(item.total));
 }
@@ -201,7 +220,9 @@ async function loadUpcomingInvoices() {
   try {
     const { data } = await api.get("/invoices/upcoming", { params: { days: 7 } });
     upcoming.value = data.invoices || [];
-  } catch { upcoming.value = []; }
+  } catch {
+    upcoming.value = [];
+  }
 }
 
 async function loadTransactions() {
@@ -210,35 +231,59 @@ async function loadTransactions() {
 }
 
 const lineOptions = computed(() => ({
-  chart: { toolbar: { show: false }, foreColor: "#52525b", fontFamily: "inherit" },
+  chart: {
+    toolbar: { show: false },
+    foreColor: "#52525b",
+    fontFamily: "inherit",
+  },
   colors: ["#2563eb"],
   stroke: { curve: "smooth", width: 3 },
   grid: { borderColor: "#e4e4e7", strokeDashArray: 4 },
   xaxis: { categories: labels.value },
-  yaxis: { labels: { formatter: (val) => "₡" + val.toLocaleString("es-CR") } },
+  yaxis: {
+    labels: {
+      formatter: (val) => "₡" + val.toLocaleString("es-CR"),
+    },
+  },
   tooltip: { theme: "light" },
 }));
 
-const lineSeries = computed(() => [{ name: "Ingresos", data: salesData.value }]);
+const lineSeries = computed(() => [
+  { name: "Ingresos", data: salesData.value },
+]);
 
 const donutOptions = computed(() => ({
   labels: expenseLabels.value,
   colors: ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#64748b"],
-  legend: { position: "bottom", labels: { colors: "#18181b" } },
-  dataLabels: { enabled: windowWidth.value >= 640, style: { fontFamily: "inherit" } },
+  legend: {
+    position: "bottom",
+    labels: { colors: "#18181b" },
+  },
+  dataLabels: {
+    enabled: windowWidth.value >= 640,
+    style: { fontFamily: "inherit" },
+  },
   tooltip: { theme: "light" },
-  stroke: { colors: ["#ffffff"] }
+  stroke: { colors: ["#ffffff"] },
 }));
 
 const donutSeries = computed(() => expenseData.value);
 
 onMounted(async () => {
-  await Promise.all([loadKpis(), loadSeries(), loadExpenseCategories(), loadUpcomingInvoices(), loadTransactions()]);
+  await Promise.all([
+    loadKpis(),
+    loadSeries(),
+    loadExpenseCategories(),
+    loadUpcomingInvoices(),
+    loadTransactions(),
+  ]);
 });
 </script>
 
 <style scoped>
-.mb-4 { margin-bottom: 16px; }
+.mb-4 {
+  margin-bottom: 16px;
+}
 
 .select-sm {
   max-width: 140px;
@@ -246,11 +291,24 @@ onMounted(async () => {
   font-size: 0.85rem;
 }
 
-.type-income { color: var(--color-success); font-weight: 500; }
-.type-expense { color: var(--color-danger); font-weight: 500; }
+.type-income {
+  color: var(--color-success);
+  font-weight: 500;
+}
 
-.hide-mobile { display: table; width: 100%; }
-.show-mobile { display: none; }
+.type-expense {
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+.hide-mobile {
+  display: table;
+  width: 100%;
+}
+
+.show-mobile {
+  display: none;
+}
 
 .mobile-cards {
   display: flex;
@@ -272,6 +330,7 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
 }
 
 .mobile-card-meta {
@@ -282,8 +341,23 @@ onMounted(async () => {
   color: var(--color-text-secondary);
 }
 
-@media (max-width: 640px) {
-  .hide-mobile { display: none; }
-  .show-mobile { display: block; }
+@media (max-width: 1024px) {
+  .hide-mobile {
+    display: none;
+  }
+
+  .show-mobile {
+    display: block;
+  }
+
+  .select-sm {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .mobile-card-row,
+  .mobile-card-meta {
+    flex-wrap: wrap;
+  }
 }
 </style>

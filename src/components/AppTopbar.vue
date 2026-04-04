@@ -39,6 +39,7 @@ const user = computed(() => auth.user);
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-width: 0;
   gap: 12px;
 }
 
@@ -47,6 +48,7 @@ const user = computed(() => auth.user);
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 
 .page-title {
@@ -83,6 +85,7 @@ const user = computed(() => auth.user);
   background-color: #f4f4f5;
   border-radius: 50px;
   border: 1px solid var(--color-border);
+  max-width: 100%;
 }
 
 .avatar {
@@ -100,6 +103,7 @@ const user = computed(() => auth.user);
 .user-info {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .user-name {
@@ -107,6 +111,7 @@ const user = computed(() => auth.user);
   font-weight: 600;
   color: var(--color-text-primary);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .user-role {
@@ -116,12 +121,13 @@ const user = computed(() => auth.user);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 500;
+  white-space: nowrap;
 }
 
-/* Mobile: hide subtitle text and user info text */
+/* Mobile */
 @media (max-width: 640px) {
   .page-title {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
   }
 
   .page-subtitle {

@@ -6,7 +6,13 @@
           <div class="form-grid two">
             <label class="label">
               Proveedor (Nombre)
-              <input v-model="form.supplier_name" class="input" type="text" placeholder="Ej. Coca Cola" required />
+              <input
+                v-model="form.supplier_name"
+                class="input"
+                type="text"
+                placeholder="Ej. Coca Cola"
+                required
+              />
             </label>
 
             <label class="label">
@@ -32,7 +38,15 @@
 
             <label class="label">
               Monto a pagar (₡)
-              <input v-model.number="form.amount" class="input" type="number" min="0.01" step="0.01" placeholder="0.00" required />
+              <input
+                v-model.number="form.amount"
+                class="input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
             </label>
           </div>
 
@@ -68,7 +82,6 @@
     <div class="mt-6">
       <AppPanel title="Listado de facturas" subtitle="Gestión completa de cuentas por pagar">
         <div v-if="invoices.length" class="table-wrap">
-          <!-- Desktop table -->
           <table class="table hide-mobile">
             <thead>
               <tr>
@@ -86,9 +99,17 @@
                 <td>{{ item.category_name }}</td>
                 <td :class="{ 'text-danger': item.status === 'overdue' }">{{ item.due_date }}</td>
                 <td><strong>{{ currency(item.amount) }}</strong></td>
-                <td><span class="status-pill" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span></td>
+                <td>
+                  <span class="status-pill" :class="statusClass(item.status)">
+                    {{ statusLabel(item.status) }}
+                  </span>
+                </td>
                 <td class="text-right">
-                  <button v-if="item.status !== 'paid'" class="btn btn-secondary btn-sm" @click="payInvoice(item.id)">
+                  <button
+                    v-if="item.status !== 'paid'"
+                    class="btn btn-secondary btn-sm"
+                    @click="payInvoice(item.id)"
+                  >
                     <CheckCircle2 size="16" class="icon-success" /> Pagar
                   </button>
                   <span v-else class="muted-action"><CheckCircle2 size="16" /> Pagada</span>
@@ -97,29 +118,39 @@
             </tbody>
           </table>
 
-          <!-- Mobile cards -->
           <div class="mobile-cards show-mobile">
             <div v-for="item in invoices" :key="item.id" class="mobile-invoice-card">
               <div class="mic-header">
                 <strong class="text-primary">{{ item.supplier_name }}</strong>
-                <span class="status-pill" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
+                <span class="status-pill" :class="statusClass(item.status)">
+                  {{ statusLabel(item.status) }}
+                </span>
               </div>
+
               <div class="mic-row">
                 <span class="muted">{{ item.category_name }}</span>
                 <strong>{{ currency(item.amount) }}</strong>
               </div>
+
               <div class="mic-footer">
                 <span :class="{ 'text-danger': item.status === 'overdue', 'muted': item.status !== 'overdue' }">
                   Vence: {{ item.due_date }}
                 </span>
-                <button v-if="item.status !== 'paid'" class="btn btn-secondary btn-sm" @click="payInvoice(item.id)">
+
+                <button
+                  v-if="item.status !== 'paid'"
+                  class="btn btn-secondary btn-sm"
+                  @click="payInvoice(item.id)"
+                >
                   <CheckCircle2 size="15" class="icon-success" /> Pagar
                 </button>
+
                 <span v-else class="muted-action"><CheckCircle2 size="15" /> Pagada</span>
               </div>
             </div>
           </div>
         </div>
+
         <EmptyState v-else>No hay facturas registradas.</EmptyState>
       </AppPanel>
     </div>
@@ -147,7 +178,11 @@ const form = reactive({
 });
 
 function currency(value) {
-  return new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC", maximumFractionDigits: 2 }).format(Number(value || 0));
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
 }
 
 function statusLabel(status) {
@@ -156,10 +191,17 @@ function statusLabel(status) {
 }
 
 function statusClass(status) {
-  return { "pill-pending": status === "pending", "pill-paid": status === "paid", "pill-overdue": status === "overdue" };
+  return {
+    "pill-pending": status === "pending",
+    "pill-paid": status === "paid",
+    "pill-overdue": status === "overdue",
+  };
 }
 
-function clearMessages() { success.value = ""; error.value = ""; }
+function clearMessages() {
+  success.value = "";
+  error.value = "";
+}
 
 async function loadInvoices() {
   const params = statusFilter.value ? { status: statusFilter.value } : {};
@@ -172,9 +214,14 @@ async function createInvoice() {
   try {
     await api.post("/invoices", form);
     success.value = "Factura registrada correctamente.";
-    form.supplier_name = ""; form.category_name = ""; form.amount = ""; form.due_date = "";
+    form.supplier_name = "";
+    form.category_name = "";
+    form.amount = "";
+    form.due_date = "";
     await loadInvoices();
-  } catch (e) { error.value = e?.response?.data?.message || "No se pudo registrar la factura."; }
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo registrar la factura.";
+  }
 }
 
 async function payInvoice(id) {
@@ -183,7 +230,9 @@ async function payInvoice(id) {
     await api.post(`/invoices/${id}/pay`);
     success.value = "Factura marcada como pagada.";
     await loadInvoices();
-  } catch (e) { error.value = "No se pudo actualizar la factura."; }
+  } catch (e) {
+    error.value = "No se pudo actualizar la factura.";
+  }
 }
 
 async function refreshStatuses() {
@@ -192,19 +241,41 @@ async function refreshStatuses() {
     await api.post("/invoices/refresh-statuses");
     success.value = "Estados actualizados.";
     await loadInvoices();
-  } catch (e) { error.value = "Error al actualizar."; }
+  } catch (e) {
+    error.value = "Error al actualizar.";
+  }
 }
 
-onMounted(() => { loadInvoices(); });
+onMounted(() => {
+  loadInvoices();
+});
 </script>
 
 <style scoped>
-.mt-2 { margin-top: 8px; }
-.mt-6 { margin-top: 24px; }
-.text-right { text-align: right; }
-.text-primary { color: var(--color-text-primary); }
-.text-danger { color: var(--color-danger); font-weight: 600; }
-.icon-success { color: var(--color-success); }
+.mt-2 {
+  margin-top: 8px;
+}
+
+.mt-6 {
+  margin-top: 24px;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-primary {
+  color: var(--color-text-primary);
+}
+
+.text-danger {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.icon-success {
+  color: var(--color-success);
+}
 
 .actions-row {
   display: flex;
@@ -224,11 +295,25 @@ onMounted(() => { loadInvoices(); });
   white-space: nowrap;
 }
 
-.pill-pending { background-color: #fef3c7; color: #b45309; }
-.pill-paid    { background-color: #d1fae5; color: #047857; }
-.pill-overdue { background-color: #fee2e2; color: #b91c1c; }
+.pill-pending {
+  background-color: #fef3c7;
+  color: #b45309;
+}
 
-.btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+.pill-paid {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.pill-overdue {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
 
 .muted-action {
   display: inline-flex;
@@ -239,11 +324,15 @@ onMounted(() => { loadInvoices(); });
   font-weight: 500;
 }
 
-/* Desktop/Mobile toggle */
-.hide-mobile { display: table; width: 100%; }
-.show-mobile  { display: none; }
+.hide-mobile {
+  display: table;
+  width: 100%;
+}
 
-/* Mobile invoice cards */
+.show-mobile {
+  display: none;
+}
+
 .mobile-cards {
   display: flex;
   flex-direction: column;
@@ -271,6 +360,7 @@ onMounted(() => { loadInvoices(); });
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
 .mic-footer {
@@ -284,9 +374,15 @@ onMounted(() => { loadInvoices(); });
   gap: 8px;
 }
 
-@media (max-width: 640px) {
-  .hide-mobile { display: none; }
-  .show-mobile  { display: block; }
+/* antes estaba en 640px */
+@media (max-width: 1024px) {
+  .hide-mobile {
+    display: none;
+  }
+
+  .show-mobile {
+    display: block;
+  }
 
   .actions-row {
     flex-direction: column;
@@ -295,6 +391,17 @@ onMounted(() => { loadInvoices(); });
   .actions-row .btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .mic-header,
+  .mic-row,
+  .mic-footer {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .status-pill {
+    font-size: 0.68rem;
   }
 }
 </style>

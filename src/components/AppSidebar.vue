@@ -61,7 +61,7 @@ function logout() {
 }
 
 .sidebar-logo {
-  height: 72px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -88,6 +88,7 @@ function logout() {
   color: var(--color-text-primary);
   letter-spacing: -0.02em;
   flex: 1;
+  min-width: 0;
 }
 
 .sidebar-close {
@@ -124,6 +125,7 @@ function logout() {
   text-decoration: none;
   font-weight: 500;
   transition: all 0.2s ease;
+  min-width: 0;
 }
 
 .nav-item:hover {
@@ -166,7 +168,6 @@ function logout() {
   background-color: var(--color-danger-alpha);
 }
 
-/* Show close button on mobile */
 @media (max-width: 1024px) {
   .sidebar-close {
     display: flex;
@@ -175,7 +176,16 @@ function logout() {
   }
 
   .sidebar-logo {
-    height: 60px;
+    min-height: 60px;
+    padding: 0 18px;
+  }
+
+  .sidebar-nav {
+    padding: 18px 12px;
+  }
+
+  .sidebar-footer {
+    padding: 18px 12px;
   }
 }
 </style>

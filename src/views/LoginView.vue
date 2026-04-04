@@ -75,12 +75,15 @@ const router = useRouter();
 async function submit() {
   error.value = "";
   loading.value = true;
+
   try {
     await auth.login(email.value, password.value);
     await auth.fetchMe();
     router.push("/");
   } catch (e) {
-    error.value = e?.response?.data?.message || "Credenciales incorrectas. Verifica tu correo y contraseña.";
+    error.value =
+      e?.response?.data?.message ||
+      "Credenciales incorrectas. Verifica tu correo y contraseña.";
   } finally {
     loading.value = false;
   }
@@ -91,12 +94,12 @@ async function submit() {
 .login-container {
   display: flex;
   min-height: 100vh;
-  width: 100vw;
+  width: 100%;
+  overflow-x: hidden;
   font-family: inherit;
   background-color: #ffffff;
 }
 
-/* Brand panel - hidden on mobile, shown on desktop */
 .login-brand {
   flex: 1;
   display: none;
@@ -159,7 +162,6 @@ async function submit() {
   z-index: 1;
 }
 
-/* Form section */
 .login-form-section {
   flex: 1;
   display: flex;
@@ -167,6 +169,7 @@ async function submit() {
   justify-content: center;
   padding: 24px 20px;
   background-color: #ffffff;
+  min-width: 0;
 }
 
 .form-wrapper {
@@ -284,14 +287,34 @@ async function submit() {
   text-align: center;
 }
 
-/* Mobile-only: show logo icon in form */
 @media (max-width: 1023px) {
   .mobile-logo {
     display: flex;
   }
 }
 
-/* Small mobile */
+@media (max-width: 640px) {
+  .login-form-section {
+    padding: 24px 16px;
+  }
+
+  .form-wrapper {
+    max-width: 100%;
+  }
+
+  .form-header {
+    margin-bottom: 28px;
+  }
+
+  .form-header h2 {
+    font-size: 1.6rem;
+  }
+
+  .form-header p {
+    font-size: 0.9rem;
+  }
+}
+
 @media (max-width: 400px) {
   .login-form-section {
     padding: 20px 16px;
@@ -301,6 +324,14 @@ async function submit() {
 
   .form-header h2 {
     font-size: 1.5rem;
+  }
+
+  .input-group input {
+    padding: 11px 14px;
+  }
+
+  .btn-submit {
+    padding: 12px;
   }
 }
 </style>
