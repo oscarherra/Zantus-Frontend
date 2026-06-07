@@ -5,7 +5,7 @@
         <form @submit.prevent="createInvoice" class="form-grid">
           <div class="form-grid two">
             <label class="label">
-              Proveedor (Nombre)
+              Proveedor
               <input
                 v-model="form.supplier_name"
                 class="input"
@@ -37,7 +37,7 @@
             </label>
 
             <label class="label">
-              Monto a pagar (₡)
+              Monto a pagar
               <input
                 v-model.number="form.amount"
                 class="input"
@@ -54,6 +54,7 @@
             <button type="submit" class="btn btn-primary">
               <Plus size="18" /> Guardar factura
             </button>
+
             <button type="button" class="btn btn-secondary" @click="refreshStatuses">
               <RefreshCcw size="18" /> Refrescar vencidas
             </button>
@@ -67,7 +68,7 @@
       <AppPanel title="Filtros rápidos" subtitle="Consulta rápida por estado">
         <div class="form-grid">
           <label class="label">
-            Filtrar por Estado
+            Filtrar por estado
             <select v-model="statusFilter" class="select" @change="loadInvoices">
               <option value="">Todas las facturas</option>
               <option value="pending">Pendientes de pago</option>
@@ -87,23 +88,37 @@
               <tr>
                 <th>Proveedor</th>
                 <th>Categoría</th>
-                <th>Fecha Límite</th>
+                <th>Fecha límite</th>
                 <th>Monto</th>
                 <th>Estado</th>
                 <th class="text-right">Acción</th>
               </tr>
             </thead>
+
             <tbody>
               <tr v-for="item in invoices" :key="item.id">
-                <td><strong class="text-primary">{{ item.supplier_name }}</strong></td>
+                <td>
+                  <strong class="text-primary">
+                    {{ item.supplier?.name || item.supplier_name || "Sin proveedor" }}
+                  </strong>
+                </td>
+
                 <td>{{ item.category_name }}</td>
-                <td :class="{ 'text-danger': item.status === 'overdue' }">{{ item.due_date }}</td>
-                <td><strong>{{ currency(item.amount) }}</strong></td>
+
+                <td :class="{ 'text-danger': item.status === 'overdue' }">
+                  {{ formatDate(item.due_date) }}
+                </td>
+
+                <td>
+                  <strong>{{ currency(item.amount) }}</strong>
+                </td>
+
                 <td>
                   <span class="status-pill" :class="statusClass(item.status)">
                     {{ statusLabel(item.status) }}
                   </span>
                 </td>
+
                 <td class="text-right">
                   <button
                     v-if="item.status !== 'paid'"
@@ -112,7 +127,10 @@
                   >
                     <CheckCircle2 size="16" class="icon-success" /> Pagar
                   </button>
-                  <span v-else class="muted-action"><CheckCircle2 size="16" /> Pagada</span>
+
+                  <span v-else class="muted-action">
+                    <CheckCircle2 size="16" /> Pagada
+                  </span>
                 </td>
               </tr>
             </tbody>
@@ -121,7 +139,10 @@
           <div class="mobile-cards show-mobile">
             <div v-for="item in invoices" :key="item.id" class="mobile-invoice-card">
               <div class="mic-header">
-                <strong class="text-primary">{{ item.supplier_name }}</strong>
+                <strong class="text-primary">
+                  {{ item.supplier?.name || item.supplier_name || "Sin proveedor" }}
+                </strong>
+
                 <span class="status-pill" :class="statusClass(item.status)">
                   {{ statusLabel(item.status) }}
                 </span>
@@ -133,8 +154,8 @@
               </div>
 
               <div class="mic-footer">
-                <span :class="{ 'text-danger': item.status === 'overdue', 'muted': item.status !== 'overdue' }">
-                  Vence: {{ item.due_date }}
+                <span :class="{ 'text-danger': item.status === 'overdue', muted: item.status !== 'overdue' }">
+                  Vence: {{ formatDate(item.due_date) }}
                 </span>
 
                 <button
@@ -145,7 +166,9 @@
                   <CheckCircle2 size="15" class="icon-success" /> Pagar
                 </button>
 
-                <span v-else class="muted-action"><CheckCircle2 size="15" /> Pagada</span>
+                <span v-else class="muted-action">
+                  <CheckCircle2 size="15" /> Pagada
+                </span>
               </div>
             </div>
           </div>
@@ -185,8 +208,24 @@ function currency(value) {
   }).format(Number(value || 0));
 }
 
+function formatDate(value) {
+  if (!value) return "-";
+
+  return new Date(value).toLocaleDateString("es-CR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function statusLabel(status) {
-  const map = { pending: "Pendiente", paid: "Pagada", overdue: "Vencida" };
+  const map = {
+    pending: "Pendiente",
+    paid: "Pagada",
+    overdue: "Vencida",
+    cancelled: "Cancelada",
+  };
+
   return map[status] || status;
 }
 
@@ -195,6 +234,7 @@ function statusClass(status) {
     "pill-pending": status === "pending",
     "pill-paid": status === "paid",
     "pill-overdue": status === "overdue",
+    "pill-cancelled": status === "cancelled",
   };
 }
 
@@ -204,20 +244,34 @@ function clearMessages() {
 }
 
 async function loadInvoices() {
-  const params = statusFilter.value ? { status: statusFilter.value } : {};
-  const { data } = await api.get("/invoices", { params });
-  invoices.value = data.invoices?.data || [];
+  try {
+    const params = statusFilter.value ? { status: statusFilter.value } : {};
+    const { data } = await api.get("/invoices", { params });
+
+    invoices.value = data.invoices?.data || [];
+  } catch (e) {
+    error.value = "No se pudieron cargar las facturas.";
+  }
 }
 
 async function createInvoice() {
   clearMessages();
+
   try {
-    await api.post("/invoices", form);
+    await api.post("/invoices", {
+      supplier_name: form.supplier_name,
+      category_name: form.category_name,
+      amount: form.amount,
+      due_date: form.due_date,
+    });
+
     success.value = "Factura registrada correctamente.";
+
     form.supplier_name = "";
     form.category_name = "";
     form.amount = "";
     form.due_date = "";
+
     await loadInvoices();
   } catch (e) {
     error.value = e?.response?.data?.message || "No se pudo registrar la factura.";
@@ -226,23 +280,25 @@ async function createInvoice() {
 
 async function payInvoice(id) {
   clearMessages();
+
   try {
     await api.post(`/invoices/${id}/pay`);
     success.value = "Factura marcada como pagada.";
     await loadInvoices();
   } catch (e) {
-    error.value = "No se pudo actualizar la factura.";
+    error.value = e?.response?.data?.message || "No se pudo actualizar la factura.";
   }
 }
 
 async function refreshStatuses() {
   clearMessages();
+
   try {
     await api.post("/invoices/refresh-statuses");
     success.value = "Estados actualizados.";
     await loadInvoices();
   } catch (e) {
-    error.value = "Error al actualizar.";
+    error.value = e?.response?.data?.message || "Error al actualizar.";
   }
 }
 
@@ -310,6 +366,11 @@ onMounted(() => {
   color: #b91c1c;
 }
 
+.pill-cancelled {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 0.82rem;
@@ -324,17 +385,7 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.hide-mobile {
-  display: table;
-  width: 100%;
-}
-
-.show-mobile {
-  display: none;
-}
-
 .mobile-cards {
-  display: flex;
   flex-direction: column;
   gap: 12px;
 }
@@ -374,14 +425,9 @@ onMounted(() => {
   gap: 8px;
 }
 
-/* antes estaba en 640px */
-@media (max-width: 1024px) {
-  .hide-mobile {
-    display: none;
-  }
-
-  .show-mobile {
-    display: block;
+@media (max-width: 768px) {
+  .mobile-cards {
+    display: flex !important;
   }
 
   .actions-row {

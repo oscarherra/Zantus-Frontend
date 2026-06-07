@@ -9,8 +9,17 @@ export const useAuthStore = defineStore("auth", {
 
   getters: {
     isAuthenticated: (state) => !!state.token,
+
+    // Roles actuales del backend
     isAdmin: (state) => state.user?.role === "admin",
     isCashier: (state) => state.user?.role === "cashier",
+
+    // Nombres nuevos por si luego cambiás roles en backend
+    isSuperAdmin: (state) =>
+      state.user?.role === "admin" || state.user?.role === "super_admin",
+
+    isWorker: (state) =>
+      state.user?.role === "cashier" || state.user?.role === "worker",
   },
 
   actions: {
@@ -25,6 +34,7 @@ export const useAuthStore = defineStore("auth", {
 
     async fetchMe() {
       if (!this.token) return;
+
       const { data } = await api.get("/me");
       this.user = data.user;
     },

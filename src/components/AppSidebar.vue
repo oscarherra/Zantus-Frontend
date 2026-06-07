@@ -1,29 +1,65 @@
 <template>
-  <div class="sidebar-container">
+  <aside class="sidebar-container">
     <div class="sidebar-logo">
       <div class="logo-icon">
-        <Store size="24" stroke-width="2" />
+        <Store size="22" stroke-width="2" />
       </div>
+
       <span class="logo-text">Zantu's ERP</span>
+
       <button class="sidebar-close" @click="$emit('close')" aria-label="Cerrar menú">
         <X size="20" />
       </button>
     </div>
 
     <nav class="sidebar-nav">
-      <router-link to="/" class="nav-item" active-class="active" exact @click="$emit('close')">
+      <router-link
+        v-if="auth.isSuperAdmin"
+        to="/"
+        class="nav-item"
+        active-class="active"
+        exact
+        @click="$emit('close')"
+      >
         <LayoutDashboard size="20" class="nav-icon" />
         <span>Dashboard</span>
       </router-link>
 
       <router-link to="/caja" class="nav-item" active-class="active" @click="$emit('close')">
         <Wallet size="20" class="nav-icon" />
-        <span>Caja del día</span>
+        <span>Caja</span>
       </router-link>
 
-      <router-link to="/facturas" class="nav-item" active-class="active" @click="$emit('close')">
+      <router-link
+        v-if="auth.isSuperAdmin"
+        to="/historial"
+        class="nav-item"
+        active-class="active"
+        @click="$emit('close')"
+      >
+        <ClipboardList size="20" class="nav-icon" />
+        <span>Historial de caja</span>
+      </router-link>
+
+      <router-link
+        v-if="auth.isSuperAdmin"
+        to="/facturas"
+        class="nav-item"
+        active-class="active"
+        @click="$emit('close')"
+      >
         <Receipt size="20" class="nav-icon" />
         <span>Facturas</span>
+      </router-link>
+
+      <router-link to="/compras" class="nav-item" active-class="active" @click="$emit('close')">
+        <ShoppingCart size="20" class="nav-icon" />
+        <span>Lista de compras</span>
+      </router-link>
+
+      <router-link to="/fiados" class="nav-item" active-class="active" @click="$emit('close')">
+        <Users size="20" class="nav-icon" />
+        <span>Fiados</span>
       </router-link>
     </nav>
 
@@ -33,31 +69,47 @@
         <span>Cerrar Sesión</span>
       </button>
     </div>
-  </div>
+  </aside>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
-import { Store, LayoutDashboard, Wallet, Receipt, LogOut, X } from 'lucide-vue-next';
+import { useRouter } from "vue-router";
+import { useAuthStore } from "../stores/auth";
 
-defineEmits(['close']);
+import {
+  Store,
+  LayoutDashboard,
+  Wallet,
+  Receipt,
+  LogOut,
+  X,
+  ClipboardList,
+  ShoppingCart,
+  Users,
+} from "lucide-vue-next";
+
+defineEmits(["close"]);
 
 const router = useRouter();
 const auth = useAuthStore();
 
-function logout() {
-  auth.logout();
-  router.push('/login');
+async function logout() {
+  await auth.logout();
+  router.push("/login");
 }
 </script>
 
 <style scoped>
 .sidebar-container {
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background-color: var(--color-bg-surface);
+  background-color: var(--color-bg-surface, #ffffff);
+  border-right: 1px solid var(--color-border, #e5e7eb);
+  overflow: hidden;
 }
 
 .sidebar-logo {
@@ -66,15 +118,15 @@ function logout() {
   align-items: center;
   gap: 12px;
   padding: 0 24px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
 }
 
 .logo-icon {
-  width: 36px;
-  height: 36px;
-  background-color: var(--color-brand);
+  width: 38px;
+  height: 38px;
+  background-color: var(--color-brand, #2563eb);
   color: white;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md, 10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,10 +137,9 @@ function logout() {
 .logo-text {
   font-size: 1.125rem;
   font-weight: 700;
-  color: var(--color-text-primary);
+  color: var(--color-text-primary, #18181b);
   letter-spacing: -0.02em;
-  flex: 1;
-  min-width: 0;
+  white-space: nowrap;
 }
 
 .sidebar-close {
@@ -96,15 +147,15 @@ function logout() {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-text-secondary);
+  color: var(--color-text-secondary, #71717a);
   padding: 6px;
   border-radius: 8px;
   margin-left: auto;
 }
 
 .sidebar-close:hover {
-  background-color: var(--color-border);
-  color: var(--color-text-primary);
+  background-color: var(--color-border, #e5e7eb);
+  color: var(--color-text-primary, #18181b);
 }
 
 .sidebar-nav {
@@ -116,27 +167,30 @@ function logout() {
 }
 
 .nav-item {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
+  border-radius: var(--radius-md, 10px);
+  color: var(--color-text-secondary, #52525b);
   text-decoration: none;
   font-weight: 500;
   transition: all 0.2s ease;
-  min-width: 0;
+  box-sizing: border-box;
 }
 
 .nav-item:hover {
   background-color: #f4f4f5;
-  color: var(--color-text-primary);
+  color: var(--color-text-primary, #18181b);
+  text-decoration: none;
 }
 
 .nav-item.active {
-  background-color: var(--color-brand-alpha);
-  color: var(--color-brand);
+  background-color: var(--color-brand-alpha, #e8efff);
+  color: var(--color-brand, #2563eb);
   font-weight: 600;
+  text-decoration: none;
 }
 
 .nav-icon {
@@ -145,7 +199,7 @@ function logout() {
 
 .sidebar-footer {
   padding: 24px 16px;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border, #e5e7eb);
 }
 
 .btn-logout {
@@ -154,18 +208,19 @@ function logout() {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md, 10px);
   background: transparent;
   border: none;
-  color: var(--color-danger);
+  color: var(--color-danger, #ef4444);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 1rem;
+  text-align: left;
 }
 
 .btn-logout:hover {
-  background-color: var(--color-danger-alpha);
+  background-color: var(--color-danger-alpha, #fee2e2);
 }
 
 @media (max-width: 1024px) {

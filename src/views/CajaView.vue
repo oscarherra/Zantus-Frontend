@@ -1,6 +1,6 @@
 <template>
   <MainLayout
-    title="Caja del día"
+    title="Caja"
     subtitle="Apertura, movimientos, cierre y control operativo"
   >
     <div class="grid grid-2">
@@ -16,6 +16,7 @@
                 {{ cash.status === "open" ? "Abierta" : "Cerrada" }}
               </strong>
             </div>
+
             <div class="text-right">
               <div class="muted">Apertura</div>
               <strong class="amount-display">{{ currency(cash.opening_amount) }}</strong>
@@ -25,6 +26,13 @@
           <div v-if="cash.status === 'closed'" class="success-box">
             <strong>Caja cerrada</strong><br />
             Monto de cierre reportado: {{ currency(cash.closing_amount) }}.
+
+            <template v-if="cash.expected_amount !== null && cash.expected_amount !== undefined">
+              <br />
+              Monto esperado: {{ currency(cash.expected_amount) }}.
+              <br />
+              Diferencia: {{ currency(cash.difference_amount) }}.
+            </template>
           </div>
 
           <form v-if="cash.status === 'open'" class="form-grid" @submit.prevent="closeCash">
@@ -40,6 +48,7 @@
                 required
               />
             </label>
+
             <button type="submit" class="btn btn-secondary">
               <Lock size="18" /> Cerrar caja
             </button>
@@ -49,7 +58,7 @@
             v-if="cash.status === 'closed'"
             type="button"
             class="btn btn-primary mt-4"
-            @click="cash = null"
+            @click="startNewCash"
           >
             <LockOpen size="18" /> Iniciar nueva caja
           </button>
@@ -57,7 +66,7 @@
 
         <form v-else class="form-grid" @submit.prevent="openCash">
           <label class="label">
-            Monto inicial en caja (Fondo)
+            Monto inicial en caja
             <input
               v-model.number="opening"
               class="input"
@@ -68,6 +77,7 @@
               required
             />
           </label>
+
           <button type="submit" class="btn btn-primary">
             <LockOpen size="18" /> Abrir caja
           </button>
@@ -86,8 +96,8 @@
             <label class="label">
               Tipo de movimiento
               <select v-model="form.type" class="select">
-                <option value="income">Ingreso (+)</option>
-                <option value="expense">Gasto (-)</option>
+                <option value="income">Ingreso</option>
+                <option value="expense">Gasto</option>
               </select>
             </label>
 
@@ -103,7 +113,7 @@
 
           <div class="form-grid two">
             <label class="label">
-              Categoría (Opcional)
+              Categoría opcional
               <select v-model="form.category_id" class="select">
                 <option value="">Ninguna</option>
                 <option v-for="item in categories" :key="item.id" :value="item.id">
@@ -113,7 +123,7 @@
             </label>
 
             <label class="label">
-              Monto (₡)
+              Monto
               <input
                 v-model.number="form.amount"
                 class="input"
@@ -127,7 +137,7 @@
           </div>
 
           <label class="label">
-            Descripción / Detalle
+            Descripción / detalle
             <textarea
               v-model="form.description"
               class="textarea"
@@ -136,7 +146,11 @@
             ></textarea>
           </label>
 
-          <button type="submit" class="btn btn-primary" :disabled="!cash || cash.status !== 'open'">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="!cash || cash.status !== 'open'"
+          >
             <Plus size="18" /> Registrar transacción
           </button>
         </form>
@@ -159,18 +173,24 @@
               <th>Monto</th>
             </tr>
           </thead>
+
           <tbody>
             <tr v-for="item in transactions" :key="item.id">
               <td class="muted-cell">{{ formatDateTime(item.happened_at) }}</td>
+
               <td>
                 <span :class="item.type === 'income' ? 'type-income' : 'type-expense'">
                   {{ item.type === "income" ? "Ingreso" : "Gasto" }}
                 </span>
               </td>
+
               <td>{{ item.category?.name || "-" }}</td>
               <td>{{ paymentLabel(item.payment_method) }}</td>
               <td>{{ item.description || "-" }}</td>
-              <td><strong>{{ currency(item.amount) }}</strong></td>
+
+              <td>
+                <strong>{{ currency(item.amount) }}</strong>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -181,14 +201,19 @@
               <span :class="item.type === 'income' ? 'type-income' : 'type-expense'">
                 {{ item.type === "income" ? "Ingreso" : "Gasto" }}
               </span>
+
               <strong>{{ currency(item.amount) }}</strong>
             </div>
+
             <div class="mobile-card-meta">
               <span>{{ formatDateTime(item.happened_at) }}</span>
               <span>{{ paymentLabel(item.payment_method) }}</span>
               <span v-if="item.category?.name">{{ item.category.name }}</span>
             </div>
-            <div v-if="item.description" class="mobile-card-desc">{{ item.description }}</div>
+
+            <div v-if="item.description" class="mobile-card-desc">
+              {{ item.description }}
+            </div>
           </div>
         </div>
       </div>
@@ -233,6 +258,8 @@ function currency(value) {
 }
 
 function formatDateTime(value) {
+  if (!value) return "-";
+
   return new Date(value).toLocaleTimeString("es-CR", {
     hour: "2-digit",
     minute: "2-digit",
@@ -240,7 +267,12 @@ function formatDateTime(value) {
 }
 
 function paymentLabel(method) {
-  const map = { cash: "Efectivo", sinpe: "SINPE", card: "Tarjeta" };
+  const map = {
+    cash: "Efectivo",
+    sinpe: "SINPE",
+    card: "Tarjeta",
+  };
+
   return map[method] || method;
 }
 
@@ -249,37 +281,76 @@ function clearMessages() {
   error.value = "";
 }
 
-async function loadTodayCash() {
-  const { data } = await api.get("/cash-sessions/today");
-  cash.value = data.cash_session;
-  if (cash.value) await loadTransactions();
+function startNewCash() {
+  cash.value = null;
+  transactions.value = [];
+  closing.value = 0;
+  clearMessages();
+}
+
+async function loadCurrentCash() {
+  try {
+    const { data } = await api.get("/cash-sessions/current");
+
+    cash.value = data.cash_session;
+
+    if (cash.value) {
+      await loadTransactions();
+    } else {
+      transactions.value = [];
+    }
+  } catch (e) {
+    error.value = "No se pudo cargar la caja actual.";
+  }
 }
 
 async function loadTransactions() {
-  const { data } = await api.get("/transactions", {
-    params: { cash_session_id: cash.value?.id },
-  });
-  transactions.value = data.transactions?.data || [];
+  if (!cash.value?.id) {
+    transactions.value = [];
+    return;
+  }
+
+  try {
+    const { data } = await api.get("/transactions", {
+      params: { cash_session_id: cash.value.id },
+    });
+
+    transactions.value = data.transactions?.data || [];
+  } catch (e) {
+    error.value = "No se pudieron cargar los movimientos.";
+  }
 }
 
 async function loadCategories() {
-  const { data } = await api.get("/categories", { params: { type: form.type } });
-  categories.value = data.categories || [];
+  try {
+    const { data } = await api.get("/categories", {
+      params: { type: form.type },
+    });
 
-  if (form.category_id && !categories.value.find((item) => item.id === form.category_id)) {
-    form.category_id = "";
+    categories.value = data.categories || [];
+
+    const exists = categories.value.find((item) => item.id === form.category_id);
+
+    if (form.category_id && !exists) {
+      form.category_id = "";
+    }
+  } catch (e) {
+    categories.value = [];
   }
 }
 
 async function openCash() {
   clearMessages();
+
   try {
     const { data } = await api.post("/cash-sessions/open", {
       opening_amount: opening.value,
     });
+
     cash.value = data.cash_session;
     success.value = "Caja abierta correctamente.";
     opening.value = 0;
+
     await loadTransactions();
   } catch (e) {
     error.value = e?.response?.data?.message || "No se pudo abrir la caja.";
@@ -288,10 +359,17 @@ async function openCash() {
 
 async function closeCash() {
   clearMessages();
+
+  if (!cash.value?.id) {
+    error.value = "No hay una caja abierta para cerrar.";
+    return;
+  }
+
   try {
     const { data } = await api.post(`/cash-sessions/${cash.value.id}/close`, {
       closing_amount: closing.value,
     });
+
     cash.value = data.cash_session;
     success.value = "Caja cerrada correctamente.";
     closing.value = 0;
@@ -308,14 +386,19 @@ async function addTransaction() {
     return;
   }
 
-  const payload = { ...form, cash_session_id: cash.value.id };
-  if (!payload.category_id) payload.category_id = null;
+  const payload = {
+    ...form,
+    cash_session_id: cash.value.id,
+    category_id: form.category_id || null,
+  };
 
   try {
     await api.post("/transactions", payload);
+
     success.value = "Movimiento registrado correctamente.";
     form.amount = "";
     form.description = "";
+
     await loadTransactions();
   } catch (e) {
     error.value = e?.response?.data?.message || "No se pudo registrar el movimiento.";
@@ -330,7 +413,7 @@ watch(
 );
 
 onMounted(async () => {
-  await Promise.all([loadTodayCash(), loadCategories()]);
+  await Promise.all([loadCurrentCash(), loadCategories()]);
 });
 </script>
 
@@ -373,16 +456,7 @@ onMounted(async () => {
   color: var(--color-text-secondary);
 }
 
-.hide-mobile {
-  display: table;
-}
-
-.show-mobile {
-  display: none;
-}
-
 .mobile-cards {
-  display: flex;
   flex-direction: column;
   gap: 10px;
 }
@@ -421,13 +495,9 @@ onMounted(async () => {
   word-break: break-word;
 }
 
-@media (max-width: 1024px) {
-  .hide-mobile {
-    display: none;
-  }
-
-  .show-mobile {
-    display: block;
+@media (max-width: 768px) {
+  .mobile-cards {
+    display: flex !important;
   }
 
   .cash-status-box {

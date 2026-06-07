@@ -1,0 +1,4619 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+public/
+  vite.svg
+src/
+  assets/
+    styles.css
+    vue.svg
+  components/
+    AppPanel.vue
+    AppSidebar.vue
+    AppTopbar.vue
+    BaseButton.vue
+    EmptyState.vue
+    StatCard.vue
+  layouts/
+    MainLayout.vue
+  router/
+    index.js
+  services/
+    api.js
+  stores/
+    auth.js
+  views/
+    CajaView.vue
+    DashboardView.vue
+    FacturasView.vue
+    HistorialCajaView.vue
+    ListacomprasView.vue
+    LoginView.vue
+  App.vue
+  main.js
+  style.css
+.gitignore
+index.html
+package.json
+README.md
+vite.config.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/views/HistorialCajaView.vue">
+<template>
+  <MainLayout
+    title="Historial de caja"
+    subtitle="Movimientos registrados por día"
+  >
+    <!-- Filtros -->
+    <AppPanel title="Filtros" subtitle="Busca por rango de fechas o estado">
+      <div class="filters-row">
+        <label class="label">
+          Desde
+          <input v-model="filters.from" type="date" class="input" @change="loadSessions" />
+        </label>
+        <label class="label">
+          Hasta
+          <input v-model="filters.to" type="date" class="input" @change="loadSessions" />
+        </label>
+        <label class="label">
+          Estado
+          <select v-model="filters.status" class="select" @change="loadSessions">
+            <option value="">Todos</option>
+            <option value="open">Abierta</option>
+            <option value="closed">Cerrada</option>
+          </select>
+        </label>
+        <button class="btn btn-secondary filter-clear-btn" @click="clearFilters">
+          <X size="16" /> Limpiar
+        </button>
+      </div>
+    </AppPanel>
+
+    <!-- Contenido -->
+    <div class="sessions-list">
+      <!-- Loading -->
+      <div v-if="loading" class="state-center">
+        <Loader2 size="26" class="spin" />
+        <span>Cargando historial...</span>
+      </div>
+
+      <!-- Vacío -->
+      <AppPanel v-else-if="!sessions.length">
+        <EmptyState>No hay sesiones de caja en el período seleccionado.</EmptyState>
+      </AppPanel>
+
+      <!-- Sesiones -->
+      <template v-else>
+        <div
+          v-for="session in sessions"
+          :key="session.id"
+          class="session-card"
+          :class="{ 'is-open': session.status === 'open' }"
+        >
+          <!-- Header clickeable -->
+          <div class="session-header" @click="toggleSession(session.id)">
+            <div class="session-info">
+              <div class="session-date">
+                <CalendarDays size="15" />
+                {{ formatDate(session.date || session.opened_at) }}
+              </div>
+              <div class="session-meta">
+                <span class="status-pill" :class="session.status === 'open' ? 'pill-open' : 'pill-closed'">
+                  {{ session.status === 'open' ? 'Abierta' : 'Cerrada' }}
+                </span>
+                <span class="meta-chip">
+                  <Banknote size="13" />
+                  Apertura: {{ currency(session.opening_amount) }}
+                </span>
+                <span v-if="session.closing_amount != null" class="meta-chip">
+                  <Lock size="13" />
+                  Cierre: {{ currency(session.closing_amount) }}
+                </span>
+              </div>
+            </div>
+
+            <div class="session-totals">
+              <div class="total-chip income">
+                <TrendingUp size="13" />
+                {{ currency(totals[session.id]?.income || 0) }}
+              </div>
+              <div class="total-chip expense">
+                <TrendingDown size="13" />
+                {{ currency(totals[session.id]?.expense || 0) }}
+              </div>
+              <div class="total-chip profit" :class="{ negative: (totals[session.id]?.profit || 0) < 0 }">
+                <BadgeDollarSign size="13" />
+                {{ currency(totals[session.id]?.profit || 0) }}
+              </div>
+              <ChevronDown
+                size="17"
+                class="chevron"
+                :class="{ rotated: expanded.includes(session.id) }"
+              />
+            </div>
+          </div>
+
+          <!-- Detalle expandible -->
+          <div v-if="expanded.includes(session.id)" class="session-body">
+
+            <div v-if="loadingTx[session.id]" class="state-center small">
+              <Loader2 size="18" class="spin" /> Cargando movimientos...
+            </div>
+
+            <template v-else-if="txBySession[session.id]?.length">
+              <!-- Tabla desktop -->
+              <table class="table hide-mobile">
+                <thead>
+                  <tr>
+                    <th>Hora</th>
+                    <th>Tipo</th>
+                    <th>Categoría</th>
+                    <th>Método</th>
+                    <th>Descripción</th>
+                    <th style="text-align:right;">Monto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="tx in txBySession[session.id]" :key="tx.id">
+                    <td class="muted">{{ formatTime(tx.happened_at) }}</td>
+                    <td>
+                      <span :class="tx.type === 'income' ? 'chip-income' : 'chip-expense'">
+                        {{ tx.type === 'income' ? 'Ingreso' : 'Gasto' }}
+                      </span>
+                    </td>
+                    <td>{{ tx.category?.name || '-' }}</td>
+                    <td>{{ paymentLabel(tx.payment_method) }}</td>
+                    <td>{{ tx.description || '-' }}</td>
+                    <td style="text-align:right;"><strong>{{ currency(tx.amount) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- Cards móvil -->
+              <div class="mobile-tx-list show-mobile">
+                <div v-for="tx in txBySession[session.id]" :key="tx.id" class="tx-card">
+                  <div class="tx-card-top">
+                    <span :class="tx.type === 'income' ? 'chip-income' : 'chip-expense'">
+                      {{ tx.type === 'income' ? 'Ingreso' : 'Gasto' }}
+                    </span>
+                    <strong>{{ currency(tx.amount) }}</strong>
+                  </div>
+                  <div class="tx-card-meta">
+                    <span>{{ formatTime(tx.happened_at) }}</span>
+                    <span>{{ paymentLabel(tx.payment_method) }}</span>
+                    <span v-if="tx.category?.name">{{ tx.category.name }}</span>
+                  </div>
+                  <div v-if="tx.description" class="tx-card-desc">{{ tx.description }}</div>
+                </div>
+              </div>
+
+              <!-- Resumen del día -->
+              <div class="day-summary">
+                <div class="day-summary-item">
+                  <span class="muted">Total ingresos</span>
+                  <strong class="chip-income">{{ currency(totals[session.id]?.income || 0) }}</strong>
+                </div>
+                <div class="day-summary-item">
+                  <span class="muted">Total gastos</span>
+                  <strong class="chip-expense">{{ currency(totals[session.id]?.expense || 0) }}</strong>
+                </div>
+                <div class="day-summary-item">
+                  <span class="muted">Utilidad del día</span>
+                  <strong :class="(totals[session.id]?.profit || 0) >= 0 ? 'chip-income' : 'chip-expense'">
+                    {{ currency(totals[session.id]?.profit || 0) }}
+                  </strong>
+                </div>
+              </div>
+            </template>
+
+            <div v-else class="state-center small muted">
+              Sin movimientos en esta sesión.
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </MainLayout>
+</template>
+
+<script setup>
+import { onMounted, reactive, ref } from 'vue';
+import {
+  CalendarDays, TrendingUp, TrendingDown, BadgeDollarSign,
+  Lock, Banknote, ChevronDown, X, Loader2
+} from 'lucide-vue-next';
+import api from '../services/api';
+import MainLayout from '../layouts/MainLayout.vue';
+import AppPanel from '../components/AppPanel.vue';
+import EmptyState from '../components/EmptyState.vue';
+
+const sessions    = ref([]);
+const loading     = ref(false);
+const expanded    = ref([]);
+const txBySession = reactive({});
+const loadingTx   = reactive({});
+const totals      = reactive({});
+
+const filters = reactive({ from: '', to: '', status: '' });
+
+function currency(value) {
+  return new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+function formatDate(value) {
+  return new Date(value).toLocaleDateString('es-CR', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+}
+
+function formatTime(value) {
+  return new Date(value).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function paymentLabel(m) {
+  return { cash: 'Efectivo', sinpe: 'SINPE', card: 'Tarjeta' }[m] || m;
+}
+
+function computeTotals(id, txs) {
+  const income  = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const expense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  totals[id] = { income, expense, profit: income - expense };
+}
+
+async function loadSessions() {
+  loading.value = true;
+  try {
+    const params = {};
+    if (filters.from)   params.from   = filters.from;
+    if (filters.to)     params.to     = filters.to;
+    if (filters.status) params.status = filters.status;
+
+    const { data } = await api.get('/cash-sessions', { params });
+    sessions.value = data.cash_sessions || data.data || [];
+
+    // Cargar transacciones y calcular totales para cada sesión
+    for (const session of sessions.value) {
+      const { data: txData } = await api.get('/transactions', {
+        params: { cash_session_id: session.id, per_page: 500 }
+      });
+      const txs = txData.transactions?.data || [];
+      txBySession[session.id] = txs;
+      computeTotals(session.id, txs);
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function toggleSession(id) {
+  if (expanded.value.includes(id)) {
+    expanded.value = expanded.value.filter(i => i !== id);
+  } else {
+    expanded.value.push(id);
+  }
+}
+
+function clearFilters() {
+  filters.from = '';
+  filters.to = '';
+  filters.status = '';
+  loadSessions();
+}
+
+onMounted(loadSessions);
+</script>
+
+<style scoped>
+/* ── Filtros ── */
+.filters-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.filters-row .label {
+  flex: 1;
+  min-width: 130px;
+}
+
+.filter-clear-btn {
+  height: 42px;
+  align-self: flex-end;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Lista ── */
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Estado cargando / vacío ── */
+.state-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.state-center.small {
+  padding: 24px;
+  font-size: 0.85rem;
+}
+
+/* ── Tarjeta de sesión ── */
+.session-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.session-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.session-card.is-open {
+  border-left: 3px solid var(--color-success);
+}
+
+/* ── Header de la sesión ── */
+.session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  cursor: pointer;
+  gap: 16px;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.session-header:hover {
+  background-color: #f8fafc;
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.session-date {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text-primary);
+  text-transform: capitalize;
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 50px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pill-open   { background: #d1fae5; color: #047857; }
+.pill-closed { background: #f1f5f9; color: #64748b; }
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+/* ── Totales del header ── */
+.session-totals {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.total-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.total-chip.income  { background: var(--color-success-alpha); color: #047857; }
+.total-chip.expense { background: var(--color-danger-alpha); color: #b91c1c; }
+.total-chip.profit  { background: var(--color-brand-alpha); color: var(--color-brand); }
+.total-chip.profit.negative { background: var(--color-danger-alpha); color: #b91c1c; }
+
+.chevron {
+  color: var(--color-text-secondary);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.chevron.rotated { transform: rotate(180deg); }
+
+/* ── Cuerpo expandido ── */
+.session-body {
+  border-top: 1px solid var(--color-border);
+  background: #fafafa;
+  padding: 20px;
+}
+
+/* ── Tipo de transacción ── */
+.chip-income { color: var(--color-success); font-weight: 600; }
+.chip-expense { color: var(--color-danger); font-weight: 600; }
+
+/* ── Cards móvil ── */
+.hide-mobile { display: table; width: 100%; }
+.show-mobile { display: none; }
+
+.mobile-tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tx-card {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tx-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tx-card-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+.tx-card-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border);
+  padding-top: 6px;
+}
+
+/* ── Resumen del día ── */
+.day-summary {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.day-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.day-summary-item span { font-size: 0.75rem; }
+.day-summary-item strong { font-size: 0.95rem; }
+
+/* ── Spin ── */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .session-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  .session-totals {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .session-body {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .hide-mobile { display: none; }
+  .show-mobile { display: block; }
+
+  .filters-row .label { min-width: 100%; }
+
+  .filter-clear-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .total-chip { font-size: 0.72rem; padding: 3px 7px; }
+
+  .day-summary { gap: 14px; }
+}
+</style>
+</file>
+
+<file path="src/views/ListacomprasView.vue">
+<template>
+  <MainLayout title="Lista de compras" subtitle="Faltantes y artículos por reponer en la soda">
+
+    <div class="grid grid-2">
+      <!-- Panel agregar ítem -->
+      <AppPanel title="Agregar faltante" subtitle="¿Qué hace falta en la soda?">
+        <form class="form-grid" @submit.prevent="addItem">
+          <label class="label">
+            Nombre del artículo
+            <input
+              v-model="form.name"
+              class="input"
+              type="text"
+              placeholder="Ej. Queso mozarella"
+              required
+              autofocus
+            />
+          </label>
+
+          <div class="form-grid two">
+            <label class="label">
+              Cantidad
+              <input
+                v-model="form.quantity"
+                class="input"
+                type="text"
+                placeholder="Ej. 2"
+              />
+            </label>
+            <label class="label">
+              Unidad
+              <select v-model="form.unit" class="select">
+                <option value="">Sin unidad</option>
+                <option value="kg">Kilogramos (kg)</option>
+                <option value="g">Gramos (g)</option>
+                <option value="L">Litros (L)</option>
+                <option value="ml">Mililitros (ml)</option>
+                <option value="unidad">Unidad(es)</option>
+                <option value="paquete">Paquete(s)</option>
+                <option value="caja">Caja(s)</option>
+                <option value="bolsa">Bolsa(s)</option>
+                <option value="docena">Docena(s)</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="label">
+            Nota (opcional)
+            <input
+              v-model="form.notes"
+              class="input"
+              type="text"
+              placeholder="Ej. Marca Los Alpes, no otra"
+            />
+          </label>
+
+          <label class="label">
+            Categoría
+            <select v-model="form.category" class="select">
+              <option value="general">General</option>
+              <option value="lacteos">Lácteos</option>
+              <option value="carnes">Carnes</option>
+              <option value="vegetales">Vegetales / Frutas</option>
+              <option value="bebidas">Bebidas</option>
+              <option value="panaderia">Panadería</option>
+              <option value="limpieza">Limpieza</option>
+              <option value="condimentos">Condimentos</option>
+              <option value="otros">Otros</option>
+            </select>
+          </label>
+
+          <button type="submit" class="btn btn-primary" :disabled="!form.name.trim()">
+            <Plus size="18" /> Agregar a la lista
+          </button>
+        </form>
+
+        <div v-if="success" class="success-box" style="margin-top: 12px;">{{ success }}</div>
+        <div v-if="error" class="error-box" style="margin-top: 12px;">{{ error }}</div>
+      </AppPanel>
+
+      <!-- Panel resumen + acciones -->
+      <AppPanel title="Resumen" subtitle="Estado de la lista de compras">
+        <div class="summary-stats">
+          <div class="summary-stat">
+            <span class="summary-number pending-color">{{ pendingItems.length }}</span>
+            <span class="summary-label">Pendientes</span>
+          </div>
+          <div class="summary-divider"></div>
+          <div class="summary-stat">
+            <span class="summary-number done-color">{{ doneItems.length }}</span>
+            <span class="summary-label">Comprados</span>
+          </div>
+          <div class="summary-divider"></div>
+          <div class="summary-stat">
+            <span class="summary-number">{{ items.length }}</span>
+            <span class="summary-label">Total</span>
+          </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="filter-tabs">
+          <button
+            v-for="tab in tabs"
+            :key="tab.value"
+            class="tab-btn"
+            :class="{ active: activeTab === tab.value }"
+            @click="activeTab = tab.value"
+          >
+            {{ tab.label }}
+            <span class="tab-count">{{ tab.count }}</span>
+          </button>
+        </div>
+
+        <!-- Acciones PDF -->
+        <div class="pdf-actions">
+          <button class="btn btn-secondary" @click="downloadPdf('pending')" :disabled="!pendingItems.length">
+            <FileDown size="16" /> PDF pendientes
+          </button>
+          <button class="btn btn-secondary" @click="downloadPdf('all')" :disabled="!items.length">
+            <FileDown size="16" /> PDF completo
+          </button>
+        </div>
+
+        <!-- Acción limpiar comprados -->
+        <button
+          v-if="doneItems.length"
+          class="btn btn-danger-soft"
+          style="margin-top: 12px; width: 100%;"
+          @click="clearDone"
+        >
+          <Trash2 size="16" /> Limpiar {{ doneItems.length }} comprado(s)
+        </button>
+      </AppPanel>
+    </div>
+
+    <!-- Lista de ítems en tarjetas -->
+    <div class="items-section">
+      <div v-if="loading" class="state-center">
+        <Loader2 size="24" class="spin" /> Cargando lista...
+      </div>
+
+      <EmptyState v-else-if="!filteredItems.length">
+        {{ activeTab === 'pending' ? 'No hay artículos pendientes. ¡Todo está completo!' :
+           activeTab === 'done' ? 'Aún no has marcado nada como comprado.' :
+           'La lista está vacía. Agrega el primer faltante.' }}
+      </EmptyState>
+
+      <div v-else class="items-grid">
+        <div
+          v-for="item in filteredItems"
+          :key="item.id"
+          class="item-card"
+          :class="[`cat-${item.category || 'general'}`, { 'is-done': item.status === 'done' }]"
+        >
+          <!-- Checkbox superior -->
+          <div class="item-card-header">
+            <button
+              class="check-btn"
+              :class="{ checked: item.status === 'done' }"
+              @click="toggleItem(item)"
+              :title="item.status === 'done' ? 'Marcar pendiente' : 'Marcar comprado'"
+            >
+              <Check size="14" />
+            </button>
+            <span class="item-category-badge">{{ categoryLabel(item.category) }}</span>
+            <button class="delete-btn" @click="deleteItem(item.id)" title="Eliminar">
+              <X size="14" />
+            </button>
+          </div>
+
+          <!-- Contenido -->
+          <div class="item-card-body">
+            <p class="item-name" :class="{ crossed: item.status === 'done' }">{{ item.name }}</p>
+            <p v-if="item.quantity || item.unit" class="item-qty">
+              {{ item.quantity }} {{ item.unit }}
+            </p>
+            <p v-if="item.notes" class="item-notes">
+              <MessageSquare size="11" /> {{ item.notes }}
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div class="item-card-footer">
+            <span class="item-date">{{ formatDate(item.created_at) }}</span>
+            <span v-if="item.status === 'done'" class="done-tag">
+              <CheckCircle2 size="12" /> Comprado
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </MainLayout>
+</template>
+
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue';
+import {
+  Plus, Check, X, Trash2, FileDown, Loader2,
+  MessageSquare, CheckCircle2
+} from 'lucide-vue-next';
+import api from '../services/api';
+import MainLayout from '../layouts/MainLayout.vue';
+import AppPanel from '../components/AppPanel.vue';
+import EmptyState from '../components/EmptyState.vue';
+
+// ── State ──
+const items     = ref([]);
+const loading   = ref(false);
+const success   = ref('');
+const error     = ref('');
+const activeTab = ref('pending');
+
+const form = reactive({
+  name: '',
+  quantity: '',
+  unit: '',
+  notes: '',
+  category: 'general',
+});
+
+// ── Computed ──
+const pendingItems  = computed(() => items.value.filter(i => i.status === 'pending'));
+const doneItems     = computed(() => items.value.filter(i => i.status === 'done'));
+const filteredItems = computed(() => {
+  if (activeTab.value === 'pending') return pendingItems.value;
+  if (activeTab.value === 'done')    return doneItems.value;
+  return items.value;
+});
+
+const tabs = computed(() => [
+  { value: 'pending', label: 'Pendientes', count: pendingItems.value.length },
+  { value: 'done',    label: 'Comprados',  count: doneItems.value.length },
+  { value: 'all',     label: 'Todos',      count: items.value.length },
+]);
+
+// ── Helpers ──
+function categoryLabel(cat) {
+  const map = {
+    general: 'General', lacteos: 'Lácteos', carnes: 'Carnes',
+    vegetales: 'Vegetales', bebidas: 'Bebidas', panaderia: 'Panadería',
+    limpieza: 'Limpieza', condimentos: 'Condimentos', otros: 'Otros',
+  };
+  return map[cat] || 'General';
+}
+
+function formatDate(value) {
+  return new Date(value).toLocaleDateString('es-CR', { day: '2-digit', month: 'short' });
+}
+
+function clearMessages() { success.value = ''; error.value = ''; }
+
+// ── API ──
+async function loadItems() {
+  loading.value = true;
+  try {
+    const { data } = await api.get('/shopping-items');
+    items.value = data.items || [];
+  } catch (e) {
+    error.value = 'No se pudo cargar la lista.';
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function addItem() {
+  clearMessages();
+  try {
+    const { data } = await api.post('/shopping-items', { ...form });
+    items.value.unshift(data.item);
+    success.value = `"${form.name}" agregado a la lista.`;
+    form.name = ''; form.quantity = ''; form.unit = '';
+    form.notes = ''; form.category = 'general';
+    setTimeout(() => success.value = '', 3000);
+  } catch (e) {
+    error.value = e?.response?.data?.message || 'No se pudo agregar el artículo.';
+  }
+}
+
+async function toggleItem(item) {
+  const newStatus = item.status === 'pending' ? 'done' : 'pending';
+  try {
+    await api.patch(`/shopping-items/${item.id}`, { status: newStatus });
+    item.status = newStatus;
+  } catch (e) {
+    error.value = 'No se pudo actualizar el artículo.';
+  }
+}
+
+async function deleteItem(id) {
+  try {
+    await api.delete(`/shopping-items/${id}`);
+    items.value = items.value.filter(i => i.id !== id);
+  } catch (e) {
+    error.value = 'No se pudo eliminar el artículo.';
+  }
+}
+
+async function clearDone() {
+  try {
+    await api.delete('/shopping-items/done');
+    items.value = items.value.filter(i => i.status !== 'done');
+  } catch (e) {
+    error.value = 'No se pudo limpiar los artículos comprados.';
+  }
+}
+
+// ── PDF con jsPDF (CDN via dynamic import) ──
+async function downloadPdf(mode) {
+  const list = mode === 'pending' ? pendingItems.value : items.value;
+  if (!list.length) return;
+
+  // Cargar jsPDF dinámicamente
+  const { jsPDF } = await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js').catch(() => null)
+    || await import('jspdf');
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 18;
+  let y = margin;
+
+  // Header
+  doc.setFillColor(37, 99, 235);
+  doc.rect(0, 0, pageW, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text("Lista de Compras - Zantu's ERP", margin, 12);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  const dateStr = new Date().toLocaleDateString('es-CR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  doc.text(dateStr, margin, 21);
+  doc.text(mode === 'pending' ? 'Solo pendientes' : 'Lista completa', pageW - margin, 21, { align: 'right' });
+
+  y = 38;
+
+  // Agrupar por categoría
+  const grouped = {};
+  for (const item of list) {
+    const cat = categoryLabel(item.category || 'general');
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  }
+
+  doc.setTextColor(24, 24, 27);
+
+  for (const [cat, catItems] of Object.entries(grouped)) {
+    // Verificar espacio
+    if (y > 265) { doc.addPage(); y = margin; }
+
+    // Encabezado de categoría
+    doc.setFillColor(244, 244, 245);
+    doc.roundedRect(margin, y, pageW - margin * 2, 8, 2, 2, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(82, 82, 91);
+    doc.text(cat.toUpperCase(), margin + 4, y + 5.5);
+    y += 11;
+
+    for (const item of catItems) {
+      if (y > 272) { doc.addPage(); y = margin; }
+
+      // Checkbox
+      doc.setDrawColor(180, 180, 190);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(margin, y + 0.5, 5, 5, 1, 1, 'S');
+
+      if (item.status === 'done') {
+        doc.setDrawColor(16, 185, 129);
+        doc.setLineWidth(0.8);
+        doc.line(margin + 1, y + 3, margin + 2.5, y + 4.8);
+        doc.line(margin + 2.5, y + 4.8, margin + 4.5, y + 1.5);
+      }
+
+      // Nombre
+      doc.setFont('helvetica', item.status === 'done' ? 'normal' : 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(item.status === 'done' ? 150 : 24, item.status === 'done' ? 150 : 24, item.status === 'done' ? 150 : 27);
+      doc.text(item.name, margin + 8, y + 4.5);
+
+      // Cantidad + unidad
+      if (item.quantity || item.unit) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(82, 82, 91);
+        const qtyText = `${item.quantity || ''} ${item.unit || ''}`.trim();
+        doc.text(qtyText, pageW - margin, y + 4.5, { align: 'right' });
+      }
+
+      y += 8;
+
+      // Nota
+      if (item.notes) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8);
+        doc.setTextColor(130, 130, 140);
+        doc.text(`  ${item.notes}`, margin + 8, y);
+        y += 6;
+      }
+
+      // Línea separadora ligera
+      doc.setDrawColor(228, 228, 231);
+      doc.setLineWidth(0.2);
+      doc.line(margin + 8, y, pageW - margin, y);
+      y += 3;
+    }
+
+    y += 4;
+  }
+
+  // Footer
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(160, 160, 170);
+    doc.text(`Página ${i} de ${totalPages}`, pageW / 2, 292, { align: 'center' });
+  }
+
+  doc.save(`lista-compras-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+onMounted(loadItems);
+</script>
+
+<style scoped>
+/* ── Resumen ── */
+.summary-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 16px 0 20px;
+  gap: 8px;
+}
+
+.summary-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.summary-number {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.pending-color { color: #f59e0b; }
+.done-color    { color: var(--color-success); }
+
+.summary-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summary-divider {
+  width: 1px;
+  height: 40px;
+  background: var(--color-border);
+}
+
+/* ── Tabs ── */
+.filter-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 12px;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-btn:hover {
+  background: #f4f4f5;
+  color: var(--color-text-primary);
+}
+
+.tab-btn.active {
+  background: var(--color-brand-alpha);
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+  font-weight: 600;
+}
+
+.tab-count {
+  background: currentColor;
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 50px;
+  opacity: 0.85;
+}
+
+/* ── Acciones PDF ── */
+.pdf-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pdf-actions .btn {
+  flex: 1;
+  min-width: 130px;
+  font-size: 0.82rem;
+  padding: 8px 12px;
+}
+
+/* ── Botón danger soft ── */
+.btn-danger-soft {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--color-danger-alpha);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-danger-soft:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ── Sección de items ── */
+.items-section {
+  min-height: 120px;
+}
+
+.state-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Grid de tarjetas ── */
+.items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+/* ── Tarjeta de ítem ── */
+.item-card {
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1.5px solid transparent;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+  min-height: 130px;
+}
+
+.item-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+}
+
+.item-card.is-done {
+  opacity: 0.6;
+}
+
+/* Colores por categoría */
+.cat-general     { background: #fefce8; border-color: #fde68a; }
+.cat-lacteos     { background: #eff6ff; border-color: #bfdbfe; }
+.cat-carnes      { background: #fff1f2; border-color: #fecdd3; }
+.cat-vegetales   { background: #f0fdf4; border-color: #bbf7d0; }
+.cat-bebidas     { background: #f0f9ff; border-color: #bae6fd; }
+.cat-panaderia   { background: #fffbeb; border-color: #fde68a; }
+.cat-limpieza    { background: #faf5ff; border-color: #e9d5ff; }
+.cat-condimentos { background: #fff7ed; border-color: #fed7aa; }
+.cat-otros       { background: #f8fafc; border-color: #e2e8f0; }
+
+/* ── Header de la tarjeta ── */
+.item-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.check-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: transparent;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.check-btn:hover {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.check-btn.checked {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: white;
+}
+
+.item-category-badge {
+  flex: 1;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.delete-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #94a3b8;
+  transition: all 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.delete-btn:hover {
+  background: var(--color-danger-alpha);
+  color: var(--color-danger);
+}
+
+/* ── Body ── */
+.item-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.item-name.crossed {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.item-qty {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.item-notes {
+  font-size: 0.75rem;
+  color: #64748b;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* ── Footer ── */
+.item-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(0,0,0,0.07);
+  padding-top: 8px;
+  margin-top: auto;
+}
+
+.item-date {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.done-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-success);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Spin ── */
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .items-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .filter-tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 6px 8px;
+  }
+
+  .pdf-actions {
+    flex-direction: column;
+  }
+
+  .pdf-actions .btn {
+    width: 100%;
+  }
+
+  .item-card {
+    min-height: 110px;
+    padding: 12px;
+  }
+
+  .item-name {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .items-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</file>
+
+<file path="public/vite.svg">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="31.88" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 257"><defs><linearGradient id="IconifyId1813088fe1fbc01fb466" x1="-.828%" x2="57.636%" y1="7.652%" y2="78.411%"><stop offset="0%" stop-color="#41D1FF"></stop><stop offset="100%" stop-color="#BD34FE"></stop></linearGradient><linearGradient id="IconifyId1813088fe1fbc01fb467" x1="43.376%" x2="50.316%" y1="2.242%" y2="89.03%"><stop offset="0%" stop-color="#FFEA83"></stop><stop offset="8.333%" stop-color="#FFDD35"></stop><stop offset="100%" stop-color="#FFA800"></stop></linearGradient></defs><path fill="url(#IconifyId1813088fe1fbc01fb466)" d="M255.153 37.938L134.897 252.976c-2.483 4.44-8.862 4.466-11.382.048L.875 37.958c-2.746-4.814 1.371-10.646 6.827-9.67l120.385 21.517a6.537 6.537 0 0 0 2.322-.004l117.867-21.483c5.438-.991 9.574 4.796 6.877 9.62Z"></path><path fill="url(#IconifyId1813088fe1fbc01fb467)" d="M185.432.063L96.44 17.501a3.268 3.268 0 0 0-2.634 3.014l-5.474 92.456a3.268 3.268 0 0 0 3.997 3.378l24.777-5.718c2.318-.535 4.413 1.507 3.936 3.838l-7.361 36.047c-.495 2.426 1.782 4.5 4.151 3.78l15.304-4.649c2.372-.72 4.652 1.36 4.15 3.788l-11.698 56.621c-.732 3.542 3.979 5.473 5.943 2.437l1.313-2.028l72.516-144.72c1.215-2.423-.88-5.186-3.54-4.672l-25.505 4.922c-2.396.462-4.435-1.77-3.759-4.114l16.646-57.705c.677-2.35-1.37-4.583-3.769-4.113Z"></path></svg>
+</file>
+
+<file path="src/assets/vue.svg">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="37.07" height="36" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 198"><path fill="#41B883" d="M204.8 0H256L128 220.8L0 0h97.92L128 51.2L157.44 0h47.36Z"></path><path fill="#41B883" d="m0 0l128 220.8L256 0h-51.2L128 132.48L50.56 0H0Z"></path><path fill="#35495E" d="M50.56 0L128 133.12L204.8 0h-47.36L128 51.2L97.92 0H50.56Z"></path></svg>
+</file>
+
+<file path="src/components/AppPanel.vue">
+<template>
+  <section class="panel">
+    <div v-if="title || subtitle" class="panel-header">
+      <h3 class="panel-title">{{ title }}</h3>
+      <p v-if="subtitle" class="panel-subtitle">{{ subtitle }}</p>
+    </div>
+    <div class="panel-body">
+      <slot />
+    </div>
+  </section>
+</template>
+
+<script setup>
+defineProps({
+  title: String,
+  subtitle: String,
+});
+</script>
+</file>
+
+<file path="src/components/BaseButton.vue">
+<template>
+  <button :class="classes">
+    <slot />
+  </button>
+</template>
+
+<script setup>
+import { computed } from "vue";
+
+const props = defineProps({
+  variant: {
+    type: String,
+    default: "primary",
+  },
+});
+
+const classes = computed(() => {
+  return [
+    "button",
+    props.variant === "primary" && "button-primary",
+    props.variant === "secondary" && "button-secondary",
+    props.variant === "danger" && "button-danger",
+  ];
+});
+</script>
+</file>
+
+<file path="src/components/EmptyState.vue">
+<template>
+  <div class="empty-state">
+    <slot />
+  </div>
+</template>
+
+<script setup>
+</script>
+</file>
+
+<file path="src/services/api.js">
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: "http://127.0.0.1:8000/api",
+  headers: {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export default api;
+</file>
+
+<file path="src/stores/auth.js">
+import { defineStore } from "pinia";
+import api from "../services/api";
+
+export const useAuthStore = defineStore("auth", {
+  state: () => ({
+    user: null,
+    token: localStorage.getItem("token") || null,
+  }),
+
+  getters: {
+    isAuthenticated: (state) => !!state.token,
+    isAdmin: (state) => state.user?.role === "admin",
+    isCashier: (state) => state.user?.role === "cashier",
+  },
+
+  actions: {
+    async login(email, password) {
+      const { data } = await api.post("/login", { email, password });
+
+      this.user = data.user;
+      this.token = data.token;
+
+      localStorage.setItem("token", data.token);
+    },
+
+    async fetchMe() {
+      if (!this.token) return;
+      const { data } = await api.get("/me");
+      this.user = data.user;
+    },
+
+    async logout() {
+      try {
+        await api.post("/logout");
+      } catch (error) {
+        //
+      }
+
+      this.user = null;
+      this.token = null;
+      localStorage.removeItem("token");
+    },
+  },
+});
+</file>
+
+<file path="src/App.vue">
+<template>
+  <router-view />
+</template>
+
+<script setup>
+</script>
+</file>
+
+<file path="src/main.js">
+import { createApp } from "vue";
+import { createPinia } from "pinia";
+import VueApexCharts from "vue3-apexcharts";
+
+import App from "./App.vue";
+import router from "./router";
+import "./assets/styles.css";
+
+const app = createApp(App);
+
+app.use(createPinia());
+app.use(router);
+app.use(VueApexCharts);
+
+app.mount("#app");
+</file>
+
+<file path="src/style.css">
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+.card {
+  padding: 2em;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+</file>
+
+<file path=".gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zantu-erp-web</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "zantu-erp-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "apexcharts": "^5.10.3",
+    "axios": "^1.13.6",
+    "lucide-vue-next": "^0.577.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.25",
+    "vue-router": "^5.0.3",
+    "vue3-apexcharts": "^1.11.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.2",
+    "vite": "^7.3.1"
+  }
+}
+</file>
+
+<file path="README.md">
+# Vue 3 + Vite
+
+This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+
+Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+</file>
+
+<file path="vite.config.js">
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [vue()],
+})
+</file>
+
+<file path="src/components/StatCard.vue">
+<template>
+  <div class="panel stat-card">
+    <div class="stat-info">
+      <span class="stat-label">{{ label }}</span>
+      <span class="stat-value">{{ value }}</span>
+    </div>
+    <div class="stat-icon">
+      <slot />
+    </div>
+  </div>
+</template>
+
+<script setup>
+defineProps({
+  label: String,
+  value: String,
+});
+</script>
+</file>
+
+<file path="src/router/index.js">
+import { createRouter, createWebHistory } from "vue-router";
+import { useAuthStore } from "../stores/auth";
+import LoginView from "../views/LoginView.vue";
+import DashboardView from "../views/DashboardView.vue";
+import CajaView from "../views/CajaView.vue";
+import FacturasView from "../views/FacturasView.vue";
+import HistorialCajaView from "../views/HistorialCajaView.vue";
+import ListaComprasView from "../views/ListacomprasView.vue";
+
+const routes = [
+  {
+    path: "/login",
+    name: "login",
+    component: LoginView,
+  },
+  {
+    path: "/",
+    name: "dashboard",
+    component: DashboardView,
+    meta: { auth: true },
+  },
+  {
+    path: "/caja",
+    name: "caja",
+    component: CajaView,
+    meta: { auth: true },
+  },
+  {
+    path: "/historial",
+    name: "historial",
+    component: HistorialCajaView,
+    meta: { auth: true },
+  },
+  {
+    path: "/facturas",
+    name: "facturas",
+    component: FacturasView,
+    meta: { auth: true },
+  },
+  {
+    path: "/compras",
+    name: "compras",
+    component: ListaComprasView,
+    meta: { auth: true },
+  },
+  {
+    path: "/:pathMatch(.*)*",
+    redirect: "/",
+  },
+];
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+});
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore();
+
+  // 1. Restaurar sesión si hay token guardado pero el usuario no está en memoria
+  if (auth.token && !auth.user) {
+    try {
+      await auth.fetchMe();
+    } catch (error) {
+      await auth.logout();
+      return "/login";
+    }
+  }
+
+  // 2. Proteger rutas que requieren autenticación
+  if (to.meta.auth && !auth.isAuthenticated) {
+    return "/login";
+  }
+
+  // 3. Evitar que un usuario autenticado vuelva al login
+  if (to.path === "/login" && auth.isAuthenticated) {
+    return "/";
+  }
+
+  // 4. Proteger rutas exclusivas de administrador
+  if (to.meta.adminOnly && auth.user?.role !== "admin") {
+    return "/";
+  }
+});
+
+export default router;
+</file>
+
+<file path="src/assets/styles.css">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --color-bg-base: #f4f4f5;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+
+  --color-border: #e4e4e7;
+  --color-border-hover: #d4d4d8;
+
+  --color-text-primary: #18181b;
+  --color-text-secondary: #52525b;
+  --color-text-muted: #a1a1aa;
+
+  --color-brand: #2563eb;
+  --color-brand-hover: #1d4ed8;
+  --color-brand-alpha: rgba(37, 99, 235, 0.1);
+
+  --color-danger: #ef4444;
+  --color-danger-alpha: rgba(239, 68, 68, 0.1);
+  --color-success: #10b981;
+  --color-success-alpha: rgba(16, 185, 129, 0.1);
+  --color-warning: #f59e0b;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+body {
+  line-height: 1.5;
+}
+
+img, svg, video, canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* ── Layout Base ── */
+.layout-wrapper {
+  display: flex;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.layout-sidebar {
+  width: 280px;
+  background-color: var(--color-bg-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.layout-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.layout-header {
+  min-height: 72px;
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  z-index: 5;
+}
+
+.layout-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+}
+
+.content-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Login ── */
+.login-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--color-bg-surface);
+}
+
+.login-visual {
+  flex: 1;
+  display: none;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border-right: 1px solid var(--color-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-form-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.login-form-wrapper {
+  width: 100%;
+  max-width: 400px;
+}
+
+.brand-showcase {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px;
+  max-width: 600px;
+}
+
+.brand-logo-large {
+  width: 64px;
+  height: 64px;
+  background-color: var(--color-brand);
+  color: white;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.brand-title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  background: linear-gradient(to right, #0f172a, #475569);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-description {
+  font-size: 1.125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.form-header {
+  margin-bottom: 32px;
+}
+
+.form-header h2 {
+  font-size: 1.875rem;
+  margin-bottom: 8px;
+}
+
+.form-header p {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+}
+
+/* ── Panels & Cards ── */
+.panel {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.panel-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
+  background-color: #fafafa;
+}
+
+.panel-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.panel-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+.panel-body {
+  padding: 24px;
+  min-width: 0;
+}
+
+/* ── Stat Cards (KPIs) ── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)); /* 4 columnas en desktop */
+  gap: 20px;
+}
+
+.stat-card {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+  word-break: break-word;
+}
+
+.stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-brand-alpha);
+  color: var(--color-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Formularios ── */
+.form-grid {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.form-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  min-width: 0;
+}
+
+.input,
+.select,
+.textarea,
+.form-input {
+  width: 100%;
+  max-width: 100%;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus,
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-alpha);
+}
+
+/* ── Tablas ── */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background-color: #fafafa;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* ── Utilidades ── */
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+}
+
+.muted {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.grid {
+  display: grid;
+  gap: 24px;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* ── Botones ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--color-brand);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-brand-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary {
+  background-color: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #f4f4f5;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ── Alertas ── */
+.success-box {
+  background-color: var(--color-success-alpha);
+  color: #047857;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  overflow-wrap: break-word;
+}
+
+.error-box {
+  background-color: var(--color-danger-alpha);
+  color: #b91c1c;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  overflow-wrap: break-word;
+}
+
+/* ── Empty State ── */
+.empty-state {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+/* ════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ════════════════════════════ */
+
+/* Desktop grande */
+@media (min-width: 1024px) {
+  .login-visual {
+    display: flex;
+  }
+}
+
+/* Laptop / tablet grande — grid 2 col colapsa a 1 */
+@media (max-width: 1280px) {
+  .layout-header {
+    padding: 0 20px;
+  }
+
+  .layout-content {
+    padding: 24px 20px;
+  }
+
+  .content-container {
+    gap: 20px;
+  }
+
+  .grid-2,
+  .form-grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  /* KPIs: 2 columnas en tablet */
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Tablet */
+@media (max-width: 768px) {
+  .layout-header {
+    min-height: 64px;
+    padding: 0 16px;
+  }
+
+  .layout-content {
+    padding: 16px;
+  }
+
+  .content-container {
+    gap: 16px;
+  }
+
+  .grid,
+  .kpi-row {
+    gap: 12px;
+  }
+
+  .panel-header,
+  .panel-body {
+    padding: 16px;
+  }
+
+  .table th,
+  .table td {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+  }
+
+  .stat-icon {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+/* Mobile — KPIs 2x2, grids 1 col */
+@media (max-width: 640px) {
+  .layout-header {
+    padding: 0 14px;
+    min-height: 60px;
+  }
+
+  .layout-content {
+    padding: 12px;
+  }
+
+  .content-container {
+    gap: 12px;
+  }
+
+  .panel-header,
+  .panel-body {
+    padding: 14px;
+  }
+
+  .panel-title {
+    font-size: 1rem;
+  }
+
+  .panel-subtitle,
+  .muted {
+    font-size: 0.8rem;
+  }
+
+  .input,
+  .select,
+  .textarea,
+  .form-input {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  .table th,
+  .table td {
+    padding: 9px 10px;
+  }
+
+  /* KPIs: 2 columnas en móvil (grid 2x2) */
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 14px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .stat-value {
+    font-size: 1.1rem;
+  }
+
+  .stat-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .row-between {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .grid-2,
+  .form-grid.two {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Mobile muy pequeño */
+@media (max-width: 380px) {
+  .stat-value {
+    font-size: 0.95rem;
+  }
+
+  .stat-label {
+    font-size: 0.72rem;
+  }
+}
+</file>
+
+<file path="src/components/AppSidebar.vue">
+<template>
+  <div class="sidebar-container">
+    <div class="sidebar-logo">
+      <div class="logo-icon">
+        <Store size="24" stroke-width="2" />
+      </div>
+      <span class="logo-text">Zantu's ERP</span>
+      <button class="sidebar-close" @click="$emit('close')" aria-label="Cerrar menú">
+        <X size="20" />
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <router-link to="/" class="nav-item" active-class="active" exact @click="$emit('close')">
+        <LayoutDashboard size="20" class="nav-icon" />
+        <span>Dashboard</span>
+      </router-link>
+
+      <router-link to="/caja" class="nav-item" active-class="active" @click="$emit('close')">
+        <Wallet size="20" class="nav-icon" />
+        <span>Caja del día</span>
+      </router-link>
+
+      <router-link to="/historial" class="nav-item" active-class="active" @click="$emit('close')">
+        <ClipboardList size="20" class="nav-icon" />
+        <span>Historial de caja</span>
+      </router-link>
+
+      <router-link to="/facturas" class="nav-item" active-class="active" @click="$emit('close')">
+        <Receipt size="20" class="nav-icon" />
+        <span>Facturas</span>
+      </router-link>
+
+      <router-link to="/compras" class="nav-item" active-class="active" @click="$emit('close')">
+        <ShoppingCart size="20" class="nav-icon" />
+        <span>Lista de compras</span>
+      </router-link>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button @click="logout" class="btn-logout">
+        <LogOut size="20" class="nav-icon" />
+        <span>Cerrar Sesión</span>
+      </button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../stores/auth';
+import {
+  Store, LayoutDashboard, Wallet, Receipt,
+  LogOut, X, ClipboardList, ShoppingCart
+} from 'lucide-vue-next';
+
+defineEmits(['close']);
+
+const router = useRouter();
+const auth = useAuthStore();
+
+function logout() {
+  auth.logout();
+  router.push('/login');
+}
+</script>
+
+<style scoped>
+.sidebar-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--color-bg-surface);
+}
+
+.sidebar-logo {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  background-color: var(--color-brand);
+  color: white;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-close {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  padding: 6px;
+  border-radius: 8px;
+  margin-left: auto;
+}
+
+.sidebar-close:hover {
+  background-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 0;
+}
+
+.nav-item:hover {
+  background-color: #f4f4f5;
+  color: var(--color-text-primary);
+}
+
+.nav-item.active {
+  background-color: var(--color-brand-alpha);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.nav-icon {
+  flex-shrink: 0;
+}
+
+.sidebar-footer {
+  padding: 24px 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.btn-logout {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--color-danger);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 1rem;
+}
+
+.btn-logout:hover {
+  background-color: var(--color-danger-alpha);
+}
+
+@media (max-width: 1024px) {
+  .sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-logo {
+    min-height: 60px;
+    padding: 0 18px;
+  }
+
+  .sidebar-nav {
+    padding: 18px 12px;
+  }
+
+  .sidebar-footer {
+    padding: 18px 12px;
+  }
+}
+</style>
+</file>
+
+<file path="src/components/AppTopbar.vue">
+<template>
+  <div class="topbar-container">
+    <div class="topbar-left">
+      <h1 class="page-title">{{ title }}</h1>
+      <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>
+    </div>
+
+    <div class="topbar-right">
+      <div class="user-profile">
+        <div class="avatar">
+          <User size="18" stroke-width="2.5" />
+        </div>
+        <div class="user-info">
+          <span class="user-name">{{ user?.name || 'Administrador' }}</span>
+          <span class="user-role">{{ user?.role?.toUpperCase() || 'ADMIN' }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed } from 'vue';
+import { User } from 'lucide-vue-next';
+import { useAuthStore } from '../stores/auth';
+
+defineProps({
+  title: String,
+  subtitle: String,
+});
+
+const auth = useAuthStore();
+const user = computed(() => auth.user);
+</script>
+
+<style scoped>
+.topbar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+}
+
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.page-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-subtitle {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px 5px 5px;
+  background-color: #f4f4f5;
+  border-radius: 50px;
+  border: 1px solid var(--color-border);
+  max-width: 100%;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  background-color: var(--color-brand-alpha);
+  color: var(--color-brand);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.user-role {
+  font-size: 0.65rem;
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .page-title {
+    font-size: 1.05rem;
+  }
+
+  .page-subtitle {
+    display: none;
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .user-profile {
+    padding: 5px;
+    border-radius: 50%;
+  }
+}
+</style>
+</file>
+
+<file path="src/layouts/MainLayout.vue">
+<template>
+  <div class="layout-wrapper">
+    <div
+      v-if="sidebarOpen && isMobileSidebar"
+      class="sidebar-overlay"
+      @click="sidebarOpen = false"
+    ></div>
+
+    <aside
+      class="layout-sidebar"
+      :class="{
+        'sidebar-mobile': isMobileSidebar,
+        'sidebar-open': sidebarOpen
+      }"
+    >
+      <AppSidebar @close="sidebarOpen = false" />
+    </aside>
+
+    <div class="layout-main">
+      <header class="layout-header">
+        <button
+          v-if="isMobileSidebar"
+          class="menu-toggle"
+          @click="sidebarOpen = true"
+          aria-label="Abrir menú"
+        >
+          <Menu size="22" />
+        </button>
+
+        <AppTopbar :title="title" :subtitle="subtitle" />
+      </header>
+
+      <main class="layout-content">
+        <div class="content-container">
+          <slot />
+        </div>
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from "vue";
+import { Menu } from "lucide-vue-next";
+import AppSidebar from "../components/AppSidebar.vue";
+import AppTopbar from "../components/AppTopbar.vue";
+
+defineProps({
+  title: String,
+  subtitle: String,
+});
+
+const sidebarOpen = ref(false);
+const isMobileSidebar = ref(false);
+
+function checkSidebarMode() {
+  isMobileSidebar.value = window.innerWidth <= 1280;
+
+  if (!isMobileSidebar.value) {
+    sidebarOpen.value = false;
+  }
+}
+
+onMounted(() => {
+  checkSidebarMode();
+  window.addEventListener("resize", checkSidebarMode);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", checkSidebarMode);
+});
+</script>
+
+<style scoped>
+.layout-wrapper {
+  height: 100vh;
+  display: flex;
+  background-color: var(--color-bg-base);
+  overflow: hidden;
+  position: relative;
+}
+
+/* SIDEBAR DESKTOP */
+.layout-sidebar {
+  width: 260px;
+  height: 100vh;
+  flex-shrink: 0;
+  background-color: var(--color-bg-surface);
+  border-right: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  overflow: hidden;
+}
+
+/* MAIN */
+.layout-main {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* HEADER */
+.layout-header {
+  height: 72px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* SOLO ESTA PARTE SCROLLEA */
+.layout-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.content-container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+
+.menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  padding: 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.menu-toggle:hover {
+  background-color: var(--color-border);
+}
+
+/* Ocultar botón en desktop */
+.layout-sidebar:not(.sidebar-mobile) + .layout-main .menu-toggle {
+  display: none;
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 40;
+}
+
+/* SIDEBAR MOBILE / TABLET */
+.sidebar-mobile {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  box-shadow: var(--shadow-lg);
+}
+
+.sidebar-mobile.sidebar-open {
+  transform: translateX(0);
+}
+
+@media (max-width: 1280px) {
+  .layout-header {
+    padding: 0 20px;
+  }
+
+  .content-container {
+    padding: 24px 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .layout-header {
+    height: 60px;
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .content-container {
+    padding: 16px;
+  }
+
+  .layout-sidebar {
+    width: min(85vw, 300px);
+  }
+}
+</style>
+</file>
+
+<file path="src/views/CajaView.vue">
+<template>
+  <MainLayout
+    title="Caja del día"
+    subtitle="Apertura, movimientos, cierre y control operativo"
+  >
+    <div class="grid grid-2">
+      <AppPanel
+        title="Estado de caja"
+        subtitle="Sesión de caja activa o cerrada"
+      >
+        <div v-if="cash" class="form-grid">
+          <div class="cash-status-box">
+            <div>
+              <div class="muted">Estado actual</div>
+              <strong :style="{ color: cash.status === 'open' ? 'var(--color-success)' : 'var(--color-danger)' }">
+                {{ cash.status === "open" ? "Abierta" : "Cerrada" }}
+              </strong>
+            </div>
+            <div class="text-right">
+              <div class="muted">Apertura</div>
+              <strong class="amount-display">{{ currency(cash.opening_amount) }}</strong>
+            </div>
+          </div>
+
+          <div v-if="cash.status === 'closed'" class="success-box">
+            <strong>Caja cerrada</strong><br />
+            Monto de cierre reportado: {{ currency(cash.closing_amount) }}.
+          </div>
+
+          <form v-if="cash.status === 'open'" class="form-grid" @submit.prevent="closeCash">
+            <label class="label">
+              Monto contado al cierre en colones
+              <input
+                v-model.number="closing"
+                class="input"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Ej. 150000"
+                required
+              />
+            </label>
+            <button type="submit" class="btn btn-secondary">
+              <Lock size="18" /> Cerrar caja
+            </button>
+          </form>
+
+          <button
+            v-if="cash.status === 'closed'"
+            type="button"
+            class="btn btn-primary mt-4"
+            @click="cash = null"
+          >
+            <LockOpen size="18" /> Iniciar nueva caja
+          </button>
+        </div>
+
+        <form v-else class="form-grid" @submit.prevent="openCash">
+          <label class="label">
+            Monto inicial en caja (Fondo)
+            <input
+              v-model.number="opening"
+              class="input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Ej. 25000"
+              required
+            />
+          </label>
+          <button type="submit" class="btn btn-primary">
+            <LockOpen size="18" /> Abrir caja
+          </button>
+        </form>
+
+        <div v-if="success" class="success-box mt-4">{{ success }}</div>
+        <div v-if="error" class="error-box mt-4">{{ error }}</div>
+      </AppPanel>
+
+      <AppPanel
+        title="Registrar movimiento"
+        subtitle="Ingresos y egresos rápidos"
+      >
+        <form class="form-grid" @submit.prevent="addTransaction">
+          <div class="form-grid two">
+            <label class="label">
+              Tipo de movimiento
+              <select v-model="form.type" class="select">
+                <option value="income">Ingreso (+)</option>
+                <option value="expense">Gasto (-)</option>
+              </select>
+            </label>
+
+            <label class="label">
+              Método de pago
+              <select v-model="form.payment_method" class="select">
+                <option value="cash">Efectivo</option>
+                <option value="sinpe">SINPE Móvil</option>
+                <option value="card">Tarjeta</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-grid two">
+            <label class="label">
+              Categoría (Opcional)
+              <select v-model="form.category_id" class="select">
+                <option value="">Ninguna</option>
+                <option v-for="item in categories" :key="item.id" :value="item.id">
+                  {{ item.name }}
+                </option>
+              </select>
+            </label>
+
+            <label class="label">
+              Monto (₡)
+              <input
+                v-model.number="form.amount"
+                class="input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
+            </label>
+          </div>
+
+          <label class="label">
+            Descripción / Detalle
+            <textarea
+              v-model="form.description"
+              class="textarea"
+              placeholder="¿Por qué se hace este movimiento?"
+              required
+            ></textarea>
+          </label>
+
+          <button type="submit" class="btn btn-primary" :disabled="!cash || cash.status !== 'open'">
+            <Plus size="18" /> Registrar transacción
+          </button>
+        </form>
+      </AppPanel>
+    </div>
+
+    <AppPanel
+      title="Movimientos de esta caja"
+      subtitle="Listado de ingresos y egresos de la sesión actual"
+    >
+      <div v-if="transactions.length" class="table-wrap">
+        <table class="table hide-mobile">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Tipo</th>
+              <th>Categoría</th>
+              <th>Método</th>
+              <th>Descripción</th>
+              <th>Monto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in transactions" :key="item.id">
+              <td class="muted-cell">{{ formatDateTime(item.happened_at) }}</td>
+              <td>
+                <span :class="item.type === 'income' ? 'type-income' : 'type-expense'">
+                  {{ item.type === "income" ? "Ingreso" : "Gasto" }}
+                </span>
+              </td>
+              <td>{{ item.category?.name || "-" }}</td>
+              <td>{{ paymentLabel(item.payment_method) }}</td>
+              <td>{{ item.description || "-" }}</td>
+              <td><strong>{{ currency(item.amount) }}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="mobile-cards show-mobile">
+          <div v-for="item in transactions" :key="item.id" class="mobile-card">
+            <div class="mobile-card-row">
+              <span :class="item.type === 'income' ? 'type-income' : 'type-expense'">
+                {{ item.type === "income" ? "Ingreso" : "Gasto" }}
+              </span>
+              <strong>{{ currency(item.amount) }}</strong>
+            </div>
+            <div class="mobile-card-meta">
+              <span>{{ formatDateTime(item.happened_at) }}</span>
+              <span>{{ paymentLabel(item.payment_method) }}</span>
+              <span v-if="item.category?.name">{{ item.category.name }}</span>
+            </div>
+            <div v-if="item.description" class="mobile-card-desc">{{ item.description }}</div>
+          </div>
+        </div>
+      </div>
+
+      <EmptyState v-else>
+        No hay movimientos registrados en la caja actual.
+      </EmptyState>
+    </AppPanel>
+  </MainLayout>
+</template>
+
+<script setup>
+import { onMounted, reactive, ref, watch } from "vue";
+import { Plus, LockOpen, Lock } from "lucide-vue-next";
+import api from "../services/api";
+import MainLayout from "../layouts/MainLayout.vue";
+import AppPanel from "../components/AppPanel.vue";
+import EmptyState from "../components/EmptyState.vue";
+
+const cash = ref(null);
+const categories = ref([]);
+const transactions = ref([]);
+const opening = ref(0);
+const closing = ref(0);
+const success = ref("");
+const error = ref("");
+
+const form = reactive({
+  type: "income",
+  category_id: "",
+  amount: "",
+  payment_method: "cash",
+  description: "",
+});
+
+function currency(value) {
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function formatDateTime(value) {
+  return new Date(value).toLocaleTimeString("es-CR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function paymentLabel(method) {
+  const map = { cash: "Efectivo", sinpe: "SINPE", card: "Tarjeta" };
+  return map[method] || method;
+}
+
+function clearMessages() {
+  success.value = "";
+  error.value = "";
+}
+
+async function loadTodayCash() {
+  const { data } = await api.get("/cash-sessions/today");
+  cash.value = data.cash_session;
+  if (cash.value) await loadTransactions();
+}
+
+async function loadTransactions() {
+  const { data } = await api.get("/transactions", {
+    params: { cash_session_id: cash.value?.id },
+  });
+  transactions.value = data.transactions?.data || [];
+}
+
+async function loadCategories() {
+  const { data } = await api.get("/categories", { params: { type: form.type } });
+  categories.value = data.categories || [];
+
+  if (form.category_id && !categories.value.find((item) => item.id === form.category_id)) {
+    form.category_id = "";
+  }
+}
+
+async function openCash() {
+  clearMessages();
+  try {
+    const { data } = await api.post("/cash-sessions/open", {
+      opening_amount: opening.value,
+    });
+    cash.value = data.cash_session;
+    success.value = "Caja abierta correctamente.";
+    opening.value = 0;
+    await loadTransactions();
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo abrir la caja.";
+  }
+}
+
+async function closeCash() {
+  clearMessages();
+  try {
+    const { data } = await api.post(`/cash-sessions/${cash.value.id}/close`, {
+      closing_amount: closing.value,
+    });
+    cash.value = data.cash_session;
+    success.value = "Caja cerrada correctamente.";
+    closing.value = 0;
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo cerrar la caja.";
+  }
+}
+
+async function addTransaction() {
+  clearMessages();
+
+  if (!cash.value || cash.value.status !== "open") {
+    error.value = "Debe existir una caja abierta para registrar movimientos.";
+    return;
+  }
+
+  const payload = { ...form, cash_session_id: cash.value.id };
+  if (!payload.category_id) payload.category_id = null;
+
+  try {
+    await api.post("/transactions", payload);
+    success.value = "Movimiento registrado correctamente.";
+    form.amount = "";
+    form.description = "";
+    await loadTransactions();
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo registrar el movimiento.";
+  }
+}
+
+watch(
+  () => form.type,
+  async () => {
+    await loadCategories();
+  }
+);
+
+onMounted(async () => {
+  await Promise.all([loadTodayCash(), loadCategories()]);
+});
+</script>
+
+<style scoped>
+.cash-status-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.amount-display {
+  font-size: 1.05rem;
+}
+
+.mt-4 {
+  margin-top: 16px;
+}
+
+.type-income {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.type-expense {
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+.muted-cell {
+  color: var(--color-text-secondary);
+}
+
+.hide-mobile {
+  display: table;
+}
+
+.show-mobile {
+  display: none;
+}
+
+.mobile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-card {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-card-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.mobile-card-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border);
+  padding-top: 6px;
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+  .hide-mobile {
+    display: none;
+  }
+
+  .show-mobile {
+    display: block;
+  }
+
+  .cash-status-box {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .text-right {
+    text-align: left;
+  }
+
+  .mobile-card-row,
+  .mobile-card-meta {
+    flex-wrap: wrap;
+  }
+
+  .amount-display {
+    font-size: 1rem;
+  }
+}
+</style>
+</file>
+
+<file path="src/views/DashboardView.vue">
+<template>
+  <MainLayout
+    title="Dashboard"
+    subtitle="Resumen de ingresos, egresos, tendencias y vencimientos"
+  >
+    <div class="kpi-row">
+      <StatCard label="Ingresos" :value="currency(kpis.income)">
+        <TrendingUp size="24" />
+      </StatCard>
+
+      <StatCard label="Gastos" :value="currency(kpis.expense)">
+        <TrendingDown size="24" />
+      </StatCard>
+
+      <StatCard label="Utilidad" :value="currency(kpis.profit)">
+        <BadgeDollarSign size="24" />
+      </StatCard>
+
+      <StatCard label="Facturas próximas" :value="String(upcoming.length)">
+        <CalendarClock size="24" />
+      </StatCard>
+    </div>
+
+    <div class="grid grid-2">
+      <AppPanel
+        title="Ventas por período"
+        subtitle="Comparativo por semana o mes"
+      >
+        <div class="row-between mb-4">
+          <div class="muted">Seleccione el período</div>
+          <select v-model="period" class="select select-sm" @change="loadSeries">
+            <option value="week">Semana</option>
+            <option value="month">Mes</option>
+          </select>
+        </div>
+
+        <apexchart
+          type="line"
+          :height="chartHeight"
+          :options="lineOptions"
+          :series="lineSeries"
+        />
+      </AppPanel>
+
+      <AppPanel
+        title="Gastos por categoría"
+        subtitle="Distribución del gasto del período actual"
+      >
+        <apexchart
+          type="donut"
+          :height="chartHeight"
+          :options="donutOptions"
+          :series="donutSeries"
+        />
+      </AppPanel>
+    </div>
+
+    <div class="grid grid-2">
+      <AppPanel
+        title="Facturas por vencer"
+        subtitle="Pendientes dentro de los próximos 7 días"
+      >
+        <div v-if="upcoming.length" class="table-wrap">
+          <table class="table hide-mobile">
+            <thead>
+              <tr>
+                <th>Proveedor</th>
+                <th>Categoría</th>
+                <th>Vence</th>
+                <th>Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in upcoming" :key="item.id">
+                <td>{{ item.supplier?.name || "Sin proveedor" }}</td>
+                <td>{{ item.category?.name || "Sin categoría" }}</td>
+                <td>{{ item.due_date }}</td>
+                <td><strong>{{ currency(item.amount) }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="mobile-cards show-mobile">
+            <div v-for="item in upcoming" :key="item.id" class="mobile-card">
+              <div class="mobile-card-row">
+                <strong>{{ item.supplier?.name || "Sin proveedor" }}</strong>
+                <strong>{{ currency(item.amount) }}</strong>
+              </div>
+              <div class="mobile-card-meta">
+                <span>{{ item.category?.name || "Sin categoría" }}</span>
+                <span>Vence: {{ item.due_date }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <EmptyState v-else>No hay facturas próximas por vencer.</EmptyState>
+      </AppPanel>
+
+      <AppPanel
+        title="Últimas transacciones"
+        subtitle="Movimientos recientes registrados en caja"
+      >
+        <div v-if="transactions.length" class="table-wrap">
+          <table class="table hide-mobile">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Categoría</th>
+                <th>Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in transactions" :key="item.id">
+                <td>{{ formatDateTime(item.happened_at) }}</td>
+                <td>
+                  <span :class="item.type === 'income' ? 'type-income' : 'type-expense'">
+                    {{ item.type === "income" ? "Ingreso" : "Gasto" }}
+                  </span>
+                </td>
+                <td>{{ item.category?.name || "-" }}</td>
+                <td><strong>{{ currency(item.amount) }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="mobile-cards show-mobile">
+            <div v-for="item in transactions" :key="item.id" class="mobile-card">
+              <div class="mobile-card-row">
+                <span :class="item.type === 'income' ? 'type-income' : 'type-expense'">
+                  {{ item.type === "income" ? "Ingreso" : "Gasto" }}
+                </span>
+                <strong>{{ currency(item.amount) }}</strong>
+              </div>
+              <div class="mobile-card-meta">
+                <span>{{ formatDateTime(item.happened_at) }}</span>
+                <span v-if="item.category?.name">{{ item.category.name }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <EmptyState v-else>No hay transacciones registradas.</EmptyState>
+      </AppPanel>
+    </div>
+  </MainLayout>
+</template>
+
+<script setup>
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import {
+  TrendingUp,
+  TrendingDown,
+  BadgeDollarSign,
+  CalendarClock,
+} from "lucide-vue-next";
+import api from "../services/api";
+import MainLayout from "../layouts/MainLayout.vue";
+import StatCard from "../components/StatCard.vue";
+import AppPanel from "../components/AppPanel.vue";
+import EmptyState from "../components/EmptyState.vue";
+
+const kpis = reactive({ income: 0, expense: 0, profit: 0 });
+const period = ref("week");
+const labels = ref([]);
+const salesData = ref([]);
+const expenseLabels = ref([]);
+const expenseData = ref([]);
+const upcoming = ref([]);
+const transactions = ref([]);
+const windowWidth = ref(window.innerWidth);
+
+function onResize() {
+  windowWidth.value = window.innerWidth;
+}
+
+onMounted(() => window.addEventListener("resize", onResize));
+onUnmounted(() => window.removeEventListener("resize", onResize));
+
+const chartHeight = computed(() => (windowWidth.value < 640 ? 220 : 300));
+
+function currency(value) {
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function formatDateTime(value) {
+  return new Date(value).toLocaleDateString("es-CR", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+async function loadKpis() {
+  const { data } = await api.get("/dashboard/kpis");
+  Object.assign(kpis, data);
+}
+
+async function loadSeries() {
+  const { data } = await api.get("/dashboard/sales-series", {
+    params: { period: period.value },
+  });
+  labels.value = data.series.map((item) => item.label);
+  salesData.value = data.series.map((item) => Number(item.total));
+}
+
+async function loadExpenseCategories() {
+  const { data } = await api.get("/dashboard/expenses-by-category");
+  expenseLabels.value = data.series.map((item) => item.label);
+  expenseData.value = data.series.map((item) => Number(item.total));
+}
+
+async function loadUpcomingInvoices() {
+  try {
+    const { data } = await api.get("/invoices/upcoming", { params: { days: 7 } });
+    upcoming.value = data.invoices || [];
+  } catch {
+    upcoming.value = [];
+  }
+}
+
+async function loadTransactions() {
+  const { data } = await api.get("/transactions");
+  transactions.value = data.transactions?.data?.slice(0, 5) || [];
+}
+
+const lineOptions = computed(() => ({
+  chart: {
+    toolbar: { show: false },
+    foreColor: "#52525b",
+    fontFamily: "inherit",
+  },
+  colors: ["#2563eb"],
+  stroke: { curve: "smooth", width: 3 },
+  grid: { borderColor: "#e4e4e7", strokeDashArray: 4 },
+  xaxis: { categories: labels.value },
+  yaxis: {
+    labels: {
+      formatter: (val) => "₡" + val.toLocaleString("es-CR"),
+    },
+  },
+  tooltip: { theme: "light" },
+}));
+
+const lineSeries = computed(() => [
+  { name: "Ingresos", data: salesData.value },
+]);
+
+const donutOptions = computed(() => ({
+  labels: expenseLabels.value,
+  colors: ["#3b82f6", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#64748b"],
+  legend: {
+    position: "bottom",
+    labels: { colors: "#18181b" },
+  },
+  dataLabels: {
+    enabled: windowWidth.value >= 640,
+    style: { fontFamily: "inherit" },
+  },
+  tooltip: { theme: "light" },
+  stroke: { colors: ["#ffffff"] },
+}));
+
+const donutSeries = computed(() => expenseData.value);
+
+onMounted(async () => {
+  await Promise.all([
+    loadKpis(),
+    loadSeries(),
+    loadExpenseCategories(),
+    loadUpcomingInvoices(),
+    loadTransactions(),
+  ]);
+});
+</script>
+
+<style scoped>
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.select-sm {
+  max-width: 140px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.type-income {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.type-expense {
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+.hide-mobile {
+  display: table;
+  width: 100%;
+}
+
+.show-mobile {
+  display: none;
+}
+
+.mobile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-card {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mobile-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-card-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 1024px) {
+  .hide-mobile {
+    display: none;
+  }
+
+  .show-mobile {
+    display: block;
+  }
+
+  .select-sm {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .mobile-card-row,
+  .mobile-card-meta {
+    flex-wrap: wrap;
+  }
+}
+</style>
+</file>
+
+<file path="src/views/FacturasView.vue">
+<template>
+  <MainLayout title="Facturas" subtitle="Control simplificado de cuentas por pagar">
+    <div class="grid grid-2">
+      <AppPanel title="Registrar factura" subtitle="Nueva obligación de pago">
+        <form @submit.prevent="createInvoice" class="form-grid">
+          <div class="form-grid two">
+            <label class="label">
+              Proveedor (Nombre)
+              <input
+                v-model="form.supplier_name"
+                class="input"
+                type="text"
+                placeholder="Ej. Coca Cola"
+                required
+              />
+            </label>
+
+            <label class="label">
+              Categoría
+              <select v-model="form.category_name" class="select" required>
+                <option value="" disabled>Seleccione...</option>
+                <option value="Servicios">Servicios</option>
+                <option value="Alquiler">Alquiler</option>
+                <option value="Bebidas">Bebidas</option>
+                <option value="Dulces">Dulces</option>
+                <option value="Paquetes">Paquetes</option>
+                <option value="Pago de trabajador">Pago de trabajador</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-grid two">
+            <label class="label">
+              Fecha límite de pago
+              <input v-model="form.due_date" class="input" type="date" required />
+            </label>
+
+            <label class="label">
+              Monto a pagar (₡)
+              <input
+                v-model.number="form.amount"
+                class="input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
+            </label>
+          </div>
+
+          <div class="actions-row">
+            <button type="submit" class="btn btn-primary">
+              <Plus size="18" /> Guardar factura
+            </button>
+            <button type="button" class="btn btn-secondary" @click="refreshStatuses">
+              <RefreshCcw size="18" /> Refrescar vencidas
+            </button>
+          </div>
+
+          <div v-if="success" class="success-box mt-2">{{ success }}</div>
+          <div v-if="error" class="error-box mt-2">{{ error }}</div>
+        </form>
+      </AppPanel>
+
+      <AppPanel title="Filtros rápidos" subtitle="Consulta rápida por estado">
+        <div class="form-grid">
+          <label class="label">
+            Filtrar por Estado
+            <select v-model="statusFilter" class="select" @change="loadInvoices">
+              <option value="">Todas las facturas</option>
+              <option value="pending">Pendientes de pago</option>
+              <option value="paid">Pagadas</option>
+              <option value="overdue">Vencidas</option>
+            </select>
+          </label>
+        </div>
+      </AppPanel>
+    </div>
+
+    <div class="mt-6">
+      <AppPanel title="Listado de facturas" subtitle="Gestión completa de cuentas por pagar">
+        <div v-if="invoices.length" class="table-wrap">
+          <table class="table hide-mobile">
+            <thead>
+              <tr>
+                <th>Proveedor</th>
+                <th>Categoría</th>
+                <th>Fecha Límite</th>
+                <th>Monto</th>
+                <th>Estado</th>
+                <th class="text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in invoices" :key="item.id">
+                <td><strong class="text-primary">{{ item.supplier_name }}</strong></td>
+                <td>{{ item.category_name }}</td>
+                <td :class="{ 'text-danger': item.status === 'overdue' }">{{ item.due_date }}</td>
+                <td><strong>{{ currency(item.amount) }}</strong></td>
+                <td>
+                  <span class="status-pill" :class="statusClass(item.status)">
+                    {{ statusLabel(item.status) }}
+                  </span>
+                </td>
+                <td class="text-right">
+                  <button
+                    v-if="item.status !== 'paid'"
+                    class="btn btn-secondary btn-sm"
+                    @click="payInvoice(item.id)"
+                  >
+                    <CheckCircle2 size="16" class="icon-success" /> Pagar
+                  </button>
+                  <span v-else class="muted-action"><CheckCircle2 size="16" /> Pagada</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="mobile-cards show-mobile">
+            <div v-for="item in invoices" :key="item.id" class="mobile-invoice-card">
+              <div class="mic-header">
+                <strong class="text-primary">{{ item.supplier_name }}</strong>
+                <span class="status-pill" :class="statusClass(item.status)">
+                  {{ statusLabel(item.status) }}
+                </span>
+              </div>
+
+              <div class="mic-row">
+                <span class="muted">{{ item.category_name }}</span>
+                <strong>{{ currency(item.amount) }}</strong>
+              </div>
+
+              <div class="mic-footer">
+                <span :class="{ 'text-danger': item.status === 'overdue', 'muted': item.status !== 'overdue' }">
+                  Vence: {{ item.due_date }}
+                </span>
+
+                <button
+                  v-if="item.status !== 'paid'"
+                  class="btn btn-secondary btn-sm"
+                  @click="payInvoice(item.id)"
+                >
+                  <CheckCircle2 size="15" class="icon-success" /> Pagar
+                </button>
+
+                <span v-else class="muted-action"><CheckCircle2 size="15" /> Pagada</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <EmptyState v-else>No hay facturas registradas.</EmptyState>
+      </AppPanel>
+    </div>
+  </MainLayout>
+</template>
+
+<script setup>
+import { onMounted, reactive, ref } from "vue";
+import { Plus, RefreshCcw, CheckCircle2 } from "lucide-vue-next";
+import api from "../services/api";
+import MainLayout from "../layouts/MainLayout.vue";
+import AppPanel from "../components/AppPanel.vue";
+import EmptyState from "../components/EmptyState.vue";
+
+const invoices = ref([]);
+const statusFilter = ref("");
+const success = ref("");
+const error = ref("");
+
+const form = reactive({
+  supplier_name: "",
+  category_name: "",
+  amount: "",
+  due_date: "",
+});
+
+function currency(value) {
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function statusLabel(status) {
+  const map = { pending: "Pendiente", paid: "Pagada", overdue: "Vencida" };
+  return map[status] || status;
+}
+
+function statusClass(status) {
+  return {
+    "pill-pending": status === "pending",
+    "pill-paid": status === "paid",
+    "pill-overdue": status === "overdue",
+  };
+}
+
+function clearMessages() {
+  success.value = "";
+  error.value = "";
+}
+
+async function loadInvoices() {
+  const params = statusFilter.value ? { status: statusFilter.value } : {};
+  const { data } = await api.get("/invoices", { params });
+  invoices.value = data.invoices?.data || [];
+}
+
+async function createInvoice() {
+  clearMessages();
+  try {
+    await api.post("/invoices", form);
+    success.value = "Factura registrada correctamente.";
+    form.supplier_name = "";
+    form.category_name = "";
+    form.amount = "";
+    form.due_date = "";
+    await loadInvoices();
+  } catch (e) {
+    error.value = e?.response?.data?.message || "No se pudo registrar la factura.";
+  }
+}
+
+async function payInvoice(id) {
+  clearMessages();
+  try {
+    await api.post(`/invoices/${id}/pay`);
+    success.value = "Factura marcada como pagada.";
+    await loadInvoices();
+  } catch (e) {
+    error.value = "No se pudo actualizar la factura.";
+  }
+}
+
+async function refreshStatuses() {
+  clearMessages();
+  try {
+    await api.post("/invoices/refresh-statuses");
+    success.value = "Estados actualizados.";
+    await loadInvoices();
+  } catch (e) {
+    error.value = "Error al actualizar.";
+  }
+}
+
+onMounted(() => {
+  loadInvoices();
+});
+</script>
+
+<style scoped>
+.mt-2 {
+  margin-top: 8px;
+}
+
+.mt-6 {
+  margin-top: 24px;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-primary {
+  color: var(--color-text-primary);
+}
+
+.text-danger {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.icon-success {
+  color: var(--color-success);
+}
+
+.actions-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 50px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pill-pending {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.pill-paid {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.pill-overdue {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
+
+.muted-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.hide-mobile {
+  display: table;
+  width: 100%;
+}
+
+.show-mobile {
+  display: none;
+}
+
+.mobile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-invoice-card {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mic-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mic-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--color-border);
+  padding-top: 8px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* antes estaba en 640px */
+@media (max-width: 1024px) {
+  .hide-mobile {
+    display: none;
+  }
+
+  .show-mobile {
+    display: block;
+  }
+
+  .actions-row {
+    flex-direction: column;
+  }
+
+  .actions-row .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .mic-header,
+  .mic-row,
+  .mic-footer {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .status-pill {
+    font-size: 0.68rem;
+  }
+}
+</style>
+</file>
+
+<file path="src/views/LoginView.vue">
+<template>
+  <div class="login-container">
+    <div class="login-brand">
+      <div class="brand-content">
+        <div class="logo-box">
+          <Store size="48" stroke-width="1.5" />
+        </div>
+        <h1 class="brand-name">Zantu's ERP</h1>
+        <p class="brand-tagline">
+          Plataforma integral para la gestión avanzada de operaciones y recursos gastronómicos.
+        </p>
+      </div>
+      <div class="brand-pattern"></div>
+    </div>
+
+    <div class="login-form-section">
+      <div class="form-wrapper">
+        <div class="form-header">
+          <div class="mobile-logo">
+            <Store size="32" stroke-width="1.5" />
+          </div>
+          <h2>Bienvenido</h2>
+          <p>Ingresa tus credenciales para acceder al sistema</p>
+        </div>
+
+        <form @submit.prevent="submit" class="form-body">
+          <div class="input-group">
+            <label>Correo electrónico</label>
+            <input
+              v-model="email"
+              type="email"
+              placeholder="admin@zantu.com"
+              required
+            />
+          </div>
+
+          <div class="input-group">
+            <label>Contraseña</label>
+            <input
+              v-model="password"
+              type="password"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <div v-if="error" class="error-alert">
+            {{ error }}
+          </div>
+
+          <button type="submit" class="btn-submit" :disabled="loading">
+            <LogIn v-if="!loading" size="20" />
+            <span>{{ loading ? 'Ingresando...' : 'Iniciar sesión' }}</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { LogIn, Store } from "lucide-vue-next";
+import { useAuthStore } from "../stores/auth";
+
+const email = ref("admin@zantu.com");
+const password = ref("Admin1234*");
+const error = ref("");
+const loading = ref(false);
+
+const auth = useAuthStore();
+const router = useRouter();
+
+async function submit() {
+  error.value = "";
+  loading.value = true;
+
+  try {
+    await auth.login(email.value, password.value);
+    await auth.fetchMe();
+    router.push("/");
+  } catch (e) {
+    error.value =
+      e?.response?.data?.message ||
+      "Credenciales incorrectas. Verifica tu correo y contraseña.";
+  } finally {
+    loading.value = false;
+  }
+}
+</script>
+
+<style scoped>
+.login-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  font-family: inherit;
+  background-color: #ffffff;
+}
+
+.login-brand {
+  flex: 1;
+  display: none;
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: white;
+  position: relative;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+@media (min-width: 1024px) {
+  .login-brand {
+    display: flex;
+  }
+}
+
+.brand-content {
+  position: relative;
+  z-index: 2;
+  max-width: 480px;
+}
+
+.logo-box {
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.brand-name {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 16px;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.brand-tagline {
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 400;
+}
+
+.brand-pattern {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0);
+  background-size: 32px 32px;
+  opacity: 0.5;
+  z-index: 1;
+}
+
+.login-form-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  background-color: #ffffff;
+  min-width: 0;
+}
+
+.form-wrapper {
+  width: 100%;
+  max-width: 400px;
+}
+
+.mobile-logo {
+  display: none;
+  width: 52px;
+  height: 52px;
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  color: white;
+  border-radius: 14px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.form-header {
+  margin-bottom: 36px;
+  text-align: center;
+}
+
+.form-header h2 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.form-header p {
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.input-group label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  font-size: 1rem;
+  color: #111827;
+  background-color: #f9fafb;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: #2563eb;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.input-group input::placeholder {
+  color: #9ca3af;
+}
+
+.btn-submit {
+  width: 100%;
+  padding: 13px;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+
+.btn-submit:hover:not(:disabled) {
+  background-color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.btn-submit:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
+
+.error-alert {
+  padding: 12px 16px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+@media (max-width: 1023px) {
+  .mobile-logo {
+    display: flex;
+  }
+}
+
+@media (max-width: 640px) {
+  .login-form-section {
+    padding: 24px 16px;
+  }
+
+  .form-wrapper {
+    max-width: 100%;
+  }
+
+  .form-header {
+    margin-bottom: 28px;
+  }
+
+  .form-header h2 {
+    font-size: 1.6rem;
+  }
+
+  .form-header p {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .login-form-section {
+    padding: 20px 16px;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+
+  .form-header h2 {
+    font-size: 1.5rem;
+  }
+
+  .input-group input {
+    padding: 11px 14px;
+  }
+
+  .btn-submit {
+    padding: 12px;
+  }
+}
+</style>
+</file>
+
+</files>
